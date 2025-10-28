@@ -12,6 +12,7 @@ struct SetupView: View {
     @State private var selectedWindow: WindowInfo?
     @State private var selectedBackground: BackgroundStyle = .solidColor(.black)
     @State private var showingWindowSelector = true
+    @StateObject private var recordingEngine = RecordingEngine()
 
     var body: some View {
         NavigationSplitView {
@@ -67,13 +68,52 @@ struct SetupView: View {
                     BackgroundSelectionView(selectedBackground: $selectedBackground)
                 }
 
-                Section("Actions") {
-                    Button {
-                        // TODO: Start recording
-                    } label: {
-                        Label("Start Recording", systemImage: "record.circle")
+                Section("Recording") {
+                    if recordingEngine.isRecording {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Circle()
+                                    .fill(.red)
+                                    .frame(width: 8, height: 8)
+
+                                Text("Recording")
+                                    .font(.headline)
+                                    .foregroundColor(.red)
+                            }
+
+                            Text(formatDuration(recordingEngine.recordingDuration))
+                                .font(.system(.body, design: .monospaced))
+                                .foregroundColor(.secondary)
+
+                            Button {
+                                Task {
+                                    await recordingEngine.stopRecording()
+                                }
+                            } label: {
+                                Label("Stop Recording", systemImage: "stop.circle.fill")
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                    } else {
+                        Button {
+                            if let window = selectedWindow {
+                                let config = RecordingConfiguration.default(
+                                    window: window,
+                                    background: selectedBackground
+                                )
+                                Task {
+                                    do {
+                                        try await recordingEngine.startRecording(configuration: config)
+                                    } catch {
+                                        print("Failed to start recording: \(error)")
+                                    }
+                                }
+                            }
+                        } label: {
+                            Label("Start Recording", systemImage: "record.circle")
+                        }
+                        .disabled(selectedWindow == nil)
                     }
-                    .disabled(selectedWindow == nil)
                 }
             }
         }
@@ -98,6 +138,12 @@ struct SetupView: View {
             }
             .buttonStyle(.borderedProminent)
         }
+    }
+
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 }
 

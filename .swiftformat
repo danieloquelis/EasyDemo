@@ -1,0 +1,48 @@
+# SwiftFormat Configuration
+
+--swiftversion 6.0
+
+# Indentation
+--indent 4
+--tabwidth 4
+--indentcase false
+--ifdef no-indent
+
+# Wrapping
+--maxwidth 120
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--closingparen balanced
+
+# Spacing
+--trimwhitespace always
+--nospaceoperators ..<,...
+--ranges spaced
+
+# Options
+--stripunusedargs closure-only
+--self insert
+--importgrouping alphabetized
+--commas inline
+--decimalgrouping 3,4
+--exponentcase lowercase
+--fractiongrouping disabled
+--hexgrouping 4,8
+--octalgrouping 4,8
+--patternlet inline
+--ifdef no-indent
+--elseposition same-line
+--guardelse auto
+--header strip
+
+# Enabled rules
+--enable isEmpty
+--enable sortedImports
+--enable duplicateImports
+--enable blankLinesAroundMark
+--enable blankLinesAtStartOfScope
+--enable blankLinesAtEndOfScope
+
+# Disabled rules
+--disable andOperator

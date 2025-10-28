@@ -1,0 +1,75 @@
+# SwiftLint Configuration
+# Based on EU Git Commit Guidelines for clean, maintainable code
+
+disabled_rules:
+  - trailing_whitespace
+
+opt_in_rules:
+  - empty_count
+  - empty_string
+  - explicit_init
+  - closure_spacing
+  - overridden_super_call
+  - redundant_nil_coalescing
+  - private_outlet
+  - nimble_operator
+  - attributes
+  - operator_usage_whitespace
+  - closure_end_indentation
+  - first_where
+  - sorted_first_last
+  - contains_over_first_not_nil
+  - fallthrough
+  - fatal_error_message
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - multiline_function_chains
+  - multiline_parameters
+  - unneeded_parentheses_in_closure_argument
+  - vertical_parameter_alignment_on_call
+
+excluded:
+  - .build
+  - DerivedData
+  - build
+  - .swiftpm
+
+line_length:
+  warning: 120
+  error: 200
+
+file_length:
+  warning: 500
+  error: 1200
+
+type_body_length:
+  warning: 300
+  error: 400
+
+function_body_length:
+  warning: 50
+  error: 100
+
+cyclomatic_complexity:
+  warning: 10
+  error: 20
+
+type_name:
+  min_length: 3
+  max_length: 40
+
+identifier_name:
+  min_length: 2
+  max_length: 40
+  excluded:
+    - x
+    - y
+    - id
+    - dx
+    - dy
+    - rx
+    - ry
+    - w
+    - h
+
+reporter: "xcode"

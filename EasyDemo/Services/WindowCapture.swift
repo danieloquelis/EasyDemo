@@ -66,7 +66,10 @@ class WindowCapture: ObservableObject {
         }
 
         do {
-            let content = try await SCShareableContent.current
+            let content = try await SCShareableContent.excludingDesktopWindows(
+                false,
+                onScreenWindowsOnly: true
+            )
             var windows: [WindowInfo] = []
 
             for window in content.windows {
@@ -85,20 +88,46 @@ class WindowCapture: ObservableObject {
                     continue
                 }
 
+                // Skip windows that are not on screen (layer > 0 usually means background)
+                guard window.isOnScreen else {
+                    continue
+                }
+
+                // Skip minimized windows
+                guard !window.frame.isEmpty else {
+                    continue
+                }
+
+                // Only include windows with titles or from major apps
+                let hasTitle = window.title != nil && !window.title!.isEmpty
+                let isMajorApp = app.applicationName != "Window Server" &&
+                                app.applicationName != "Dock" &&
+                                app.applicationName != "SystemUIServer"
+
+                guard hasTitle || isMajorApp else {
+                    continue
+                }
+
                 let windowInfo = WindowInfo(
                     id: window.windowID,
                     ownerName: app.applicationName,
                     windowName: window.title,
                     bounds: window.frame,
                     layer: Int(window.windowLayer),
-                    alpha: 1.0 // ScreenCaptureKit doesn't provide alpha
+                    alpha: 1.0,
+                    scWindow: window // Store the SCWindow for thumbnail capture
                 )
 
                 windows.append(windowInfo)
             }
 
-            // Sort by layer (lower layer = more prominent)
-            windows.sort { $0.layer < $1.layer }
+            // Sort by application name and then by window title
+            windows.sort { lhs, rhs in
+                if lhs.ownerName == rhs.ownerName {
+                    return (lhs.windowName ?? "") < (rhs.windowName ?? "")
+                }
+                return lhs.ownerName < rhs.ownerName
+            }
 
             self.availableWindows = windows
         } catch {
@@ -106,9 +135,42 @@ class WindowCapture: ObservableObject {
         }
     }
 
-    /// Capture an image of a specific window (placeholder for future implementation)
-    func captureWindow(_ windowInfo: WindowInfo) async -> CGImage? {
-        // This will be implemented in Milestone 2 using SCStream
-        return nil
+    /// Capture a thumbnail of a specific window
+    func captureThumbnail(for window: WindowInfo, maxSize: CGSize = CGSize(width: 200, height: 150)) async -> CGImage? {
+        guard let scWindow = window.scWindow else { return nil }
+
+        do {
+            // Create a screenshot of the window
+            let filter = SCContentFilter(desktopIndependentWindow: scWindow)
+            let config = SCStreamConfiguration()
+
+            // Calculate thumbnail size maintaining aspect ratio
+            let aspectRatio = window.bounds.width / window.bounds.height
+            var thumbWidth: Int
+            var thumbHeight: Int
+
+            if aspectRatio > (maxSize.width / maxSize.height) {
+                thumbWidth = Int(maxSize.width)
+                thumbHeight = Int(maxSize.width / aspectRatio)
+            } else {
+                thumbHeight = Int(maxSize.height)
+                thumbWidth = Int(maxSize.height * aspectRatio)
+            }
+
+            config.width = thumbWidth
+            config.height = thumbHeight
+            config.pixelFormat = kCVPixelFormatType_32BGRA
+            config.showsCursor = false
+
+            let screenshot = try await SCScreenshotManager.captureImage(
+                contentFilter: filter,
+                configuration: config
+            )
+
+            return screenshot
+        } catch {
+            print("Failed to capture thumbnail: \(error)")
+            return nil
+        }
     }
 }

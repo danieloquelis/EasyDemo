@@ -7,6 +7,7 @@
 
 import Foundation
 import CoreGraphics
+import ScreenCaptureKit
 
 /// Represents information about a macOS window
 struct WindowInfo: Identifiable, Hashable {
@@ -16,6 +17,7 @@ struct WindowInfo: Identifiable, Hashable {
     let bounds: CGRect
     let layer: Int
     let alpha: CGFloat
+    let scWindow: SCWindow?
 
     var displayName: String {
         if let name = windowName, !name.isEmpty {

@@ -157,7 +157,7 @@ struct SetupView: View {
 struct WindowSelectorSheet: View {
     @Binding var selectedWindow: WindowInfo?
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var viewModel = WindowSelectionViewModel()
+    @State private var tempSelection: WindowInfo?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -183,8 +183,7 @@ struct WindowSelectorSheet: View {
             Divider()
 
             // Window list
-            WindowSelectionView()
-                .environmentObject(viewModel)
+            WindowSelectionView(selectedWindow: $tempSelection)
 
             Divider()
 
@@ -198,11 +197,11 @@ struct WindowSelectorSheet: View {
                 .keyboardShortcut(.cancelAction)
 
                 Button("Select") {
-                    selectedWindow = viewModel.selectedWindow
+                    selectedWindow = tempSelection
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(viewModel.selectedWindow == nil)
+                .disabled(tempSelection == nil)
                 .buttonStyle(.borderedProminent)
             }
             .padding()

@@ -91,7 +91,8 @@ struct WindowPreviewView: View {
             windowName: "Test Window",
             bounds: CGRect(x: 0, y: 0, width: 800, height: 600),
             layer: 0,
-            alpha: 1.0
+            alpha: 1.0,
+            scWindow: nil
         ),
         backgroundStyle: .solidColor(.black)
     )

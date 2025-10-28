@@ -9,6 +9,7 @@ import SwiftUI
 
 /// View for selecting a window to record
 struct WindowSelectionView: View {
+    @Binding var selectedWindow: WindowInfo?
     @StateObject private var viewModel = WindowSelectionViewModel()
 
     var body: some View {
@@ -53,9 +54,9 @@ struct WindowSelectionView: View {
                 ScrollView {
                     LazyVStack(spacing: 12) {
                         ForEach(viewModel.windowCapture.availableWindows) { window in
-                            WindowRowView(window: window, isSelected: viewModel.selectedWindow?.id == window.id)
+                            WindowRowView(window: window, isSelected: selectedWindow?.id == window.id)
                                 .onTapGesture {
-                                    viewModel.selectWindow(window)
+                                    selectedWindow = window
                                 }
                         }
                     }
@@ -86,22 +87,37 @@ struct WindowSelectionView: View {
 struct WindowRowView: View {
     let window: WindowInfo
     let isSelected: Bool
+    @StateObject private var windowCapture = WindowCapture()
+    @State private var thumbnail: CGImage?
 
     var body: some View {
         HStack(spacing: 12) {
-            // Window icon
-            Image(systemName: "macwindow")
-                .font(.system(size: 24))
-                .foregroundColor(isSelected ? .white : .accentColor)
-                .frame(width: 40, height: 40)
-                .background(isSelected ? Color.accentColor : Color.accentColor.opacity(0.1))
-                .cornerRadius(8)
+            // Window thumbnail
+            if let thumbnail = thumbnail {
+                Image(decorative: thumbnail, scale: 1.0)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 80, height: 60)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: 2)
+                    )
+            } else {
+                Image(systemName: "macwindow")
+                    .font(.system(size: 24))
+                    .foregroundColor(isSelected ? .white : .accentColor)
+                    .frame(width: 80, height: 60)
+                    .background(isSelected ? Color.accentColor : Color.accentColor.opacity(0.1))
+                    .cornerRadius(8)
+            }
 
             // Window info
             VStack(alignment: .leading, spacing: 4) {
                 Text(window.displayName)
                     .font(.headline)
                     .foregroundColor(isSelected ? .white : .primary)
+                    .lineLimit(2)
 
                 HStack(spacing: 12) {
                     Label(
@@ -109,9 +125,6 @@ struct WindowRowView: View {
                         systemImage: "arrow.up.left.and.arrow.down.right"
                     )
                     .font(.caption)
-
-                    Label("Layer \(window.layer)", systemImage: "square.stack")
-                        .font(.caption)
                 }
                 .foregroundColor(isSelected ? .white.opacity(0.8) : .secondary)
             }
@@ -132,9 +145,12 @@ struct WindowRowView: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
         )
+        .task {
+            thumbnail = await windowCapture.captureThumbnail(for: window)
+        }
     }
 }
 
 #Preview {
-    WindowSelectionView()
+    WindowSelectionView(selectedWindow: .constant(nil))
 }

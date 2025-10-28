@@ -99,34 +99,43 @@ struct BackgroundPreviewCard: View {
 
     @ViewBuilder
     private var backgroundPreview: some View {
-        switch style {
-        case .solidColor(let color):
-            color
+        Group {
+            switch style {
+            case .solidColor(let color):
+                Rectangle()
+                    .fill(color)
 
-        case .gradient(let colors, let startPoint, let endPoint):
-            LinearGradient(
-                colors: colors,
-                startPoint: startPoint,
-                endPoint: endPoint
-            )
+            case .gradient(let colors, let startPoint, let endPoint):
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: colors,
+                            startPoint: startPoint,
+                            endPoint: endPoint
+                        )
+                    )
 
-        case .blur:
-            ZStack {
-                Color.gray.opacity(0.3)
-                Image(systemName: "waveform")
-                    .font(.system(size: 40))
-                    .foregroundColor(.white.opacity(0.5))
-            }
+            case .blur:
+                ZStack {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.3))
+                    Image(systemName: "waveform")
+                        .font(.system(size: 40))
+                        .foregroundColor(.white.opacity(0.5))
+                }
 
-        case .image(let url):
-            if let nsImage = NSImage(contentsOf: url) {
-                Image(nsImage: nsImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } else {
-                Color.gray
+            case .image(let url):
+                if let nsImage = NSImage(contentsOf: url) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else {
+                    Rectangle()
+                        .fill(Color.gray)
+                }
             }
         }
+        .clipped()
     }
 }
 

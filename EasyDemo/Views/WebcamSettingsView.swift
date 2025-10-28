@@ -11,6 +11,8 @@ import SwiftUI
 struct WebcamSettingsView: View {
     @Binding var configuration: WebcamConfiguration
     @StateObject private var webcam = WebcamCapture()
+    @State private var showPermissionAlert = false
+    @State private var permissionError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -23,13 +25,26 @@ struct WebcamSettingsView: View {
                             do {
                                 try await webcam.startCapture()
                             } catch {
-                                print("Failed to start webcam: \(error)")
-                                configuration.isEnabled = false
+                                await MainActor.run {
+                                    configuration.isEnabled = false
+                                    permissionError = error.localizedDescription
+                                    showPermissionAlert = true
+                                }
                             }
                         }
                     } else {
                         webcam.stopCapture()
                     }
+                }
+                .alert("Camera Permission Required", isPresented: $showPermissionAlert) {
+                    Button("Open System Settings") {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Please grant camera permission in System Settings > Privacy & Security > Camera to use webcam overlay.\n\nError: \(permissionError ?? "Unknown")")
                 }
 
             if configuration.isEnabled {

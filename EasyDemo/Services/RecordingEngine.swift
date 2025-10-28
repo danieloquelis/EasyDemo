@@ -72,8 +72,11 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
     }
 
     /// Stop recording and finalize video file
-    func stopRecording() async {
-        guard isRecording else { return }
+    func stopRecording() async -> RecordingResult? {
+        guard isRecording else { return nil }
+
+        let finalDuration = recordingDuration
+        let outputURL = configuration?.outputURL
 
         durationTimer?.invalidate()
         durationTimer = nil
@@ -107,7 +110,28 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         self.startTime = nil
         self.isRecording = false
 
-        print("Recording saved to: \(configuration?.outputURL.path ?? "unknown")")
+        // Create result
+        if let url = outputURL {
+            print("Recording saved to: \(url.path)")
+
+            // Get file size
+            let fileSize: Int64
+            if let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+               let size = attributes[.size] as? Int64 {
+                fileSize = size
+            } else {
+                fileSize = 0
+            }
+
+            return RecordingResult(
+                fileURL: url,
+                duration: finalDuration,
+                fileSize: fileSize,
+                timestamp: Date()
+            )
+        }
+
+        return nil
     }
 
     // MARK: - Setup

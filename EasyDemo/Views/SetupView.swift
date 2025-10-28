@@ -13,6 +13,7 @@ struct SetupView: View {
     @State private var selectedBackground: BackgroundStyle = .solidColor(.black)
     @State private var webcamConfig = WebcamConfiguration.default
     @State private var showingWindowSelector = true
+    @State private var recordingResult: RecordingResult?
     @StateObject private var recordingEngine = RecordingEngine()
 
     var body: some View {
@@ -92,7 +93,8 @@ struct SetupView: View {
 
                             Button {
                                 Task {
-                                    await recordingEngine.stopRecording()
+                                    let result = await recordingEngine.stopRecording()
+                                    recordingResult = result
                                 }
                             } label: {
                                 Label("Stop Recording", systemImage: "stop.circle.fill")
@@ -126,6 +128,9 @@ struct SetupView: View {
         .navigationTitle("Setup")
         .sheet(isPresented: $showingWindowSelector) {
             WindowSelectorSheet(selectedWindow: $selectedWindow)
+        }
+        .sheet(item: $recordingResult) { result in
+            RecordingCompletedView(result: result)
         }
     }
 

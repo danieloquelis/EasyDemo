@@ -1,0 +1,61 @@
+# macOS SwiftUI (Xcode) .gitignore
+
+# General
+.DS_Store
+*.swp
+*.lock
+*.orig
+*.rej
+*.log
+
+# Xcode user data (do not share)
+xcuserdata/
+*.xcuserstate
+*.moved-aside
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xccheckout
+
+# Build artifacts
+build/
+Build/
+DerivedData/
+*.hmap
+*.dSYM
+*.dSYM.zip
+*.xcarchive
+*.app
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Legacy/older SPM files
+Packages/
+Package.pins
+
+# Dependency managers (optional; keep lockfiles committed)
+Pods/
+Carthage/Build/
+Carthage/Checkouts/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+
+# Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# Coverage & Xcode logs
+*.xccoverage
+*.xcactivitylog
+
+# AI
+PRODUCT_VISION.md
+INSTRUCTIONS.md
+.claude/*

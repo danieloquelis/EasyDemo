@@ -34,6 +34,9 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
     // Background rendering
     private let ciContext = CIContext()
 
+    // Webcam capture
+    private var webcamCapture: WebcamCapture?
+
     /// Start recording with the given configuration
     func startRecording(configuration: RecordingConfiguration) async throws {
         guard !isRecording else { return }
@@ -49,6 +52,13 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
 
         // Set up SCStream
         try await setupStream(configuration: configuration)
+
+        // Set up webcam if enabled
+        if configuration.webcam.isEnabled {
+            let webcam = WebcamCapture()
+            try await webcam.startCapture()
+            self.webcamCapture = webcam
+        }
 
         // Start duration timer
         durationTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
@@ -67,6 +77,10 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
 
         durationTimer?.invalidate()
         durationTimer = nil
+
+        // Stop webcam
+        webcamCapture?.stopCapture()
+        webcamCapture = nil
 
         // Stop stream
         if let stream = stream {
@@ -242,7 +256,17 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         )
 
         // Composite: background + window
-        let composited = windowImage.composited(over: backgroundImage)
+        var composited = windowImage.composited(over: backgroundImage)
+
+        // Add webcam overlay if enabled
+        if configuration.webcam.isEnabled, let webcamFrame = webcamCapture?.currentFrame {
+            let webcamOverlay = createWebcamOverlay(
+                webcamFrame: webcamFrame,
+                configuration: configuration.webcam,
+                canvasSize: CGSize(width: width, height: height)
+            )
+            composited = webcamOverlay.composited(over: composited)
+        }
 
         // Render to output buffer
         ciContext.render(composited, to: output)
@@ -302,6 +326,69 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
             }
             return CIImage(color: CIColor.black).cropped(to: rect)
         }
+    }
+
+    private func createWebcamOverlay(
+        webcamFrame: CIImage,
+        configuration: WebcamConfiguration,
+        canvasSize: CGSize
+    ) -> CIImage {
+        let size = configuration.size
+        let padding: CGFloat = 40
+
+        // Scale webcam to desired size
+        let scale = size / max(webcamFrame.extent.width, webcamFrame.extent.height)
+        let scaledWebcam = webcamFrame
+            .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            .cropped(to: CGRect(x: 0, y: 0, width: size, height: size))
+
+        // Calculate position
+        let position = configuration.position.offset(
+            in: canvasSize,
+            webcamSize: size,
+            padding: padding
+        )
+
+        // Apply shape mask using CIFilter
+        var maskedWebcam = scaledWebcam
+
+        switch configuration.shape {
+        case .circle:
+            if let filter = CIFilter(name: "CIMaskToAlpha") {
+                // Create circular mask
+                let maskSize = size
+                let maskRect = CGRect(origin: .zero, size: CGSize(width: maskSize, height: maskSize))
+
+                // Generate circle mask using CIRadialGradient
+                if let radialFilter = CIFilter(name: "CIRadialGradient") {
+                    radialFilter.setValue(CIVector(x: maskSize/2, y: maskSize/2), forKey: "inputCenter")
+                    radialFilter.setValue(maskSize/2, forKey: "inputRadius0")
+                    radialFilter.setValue(maskSize/2 + 1, forKey: "inputRadius1")
+                    radialFilter.setValue(CIColor.white, forKey: "inputColor0")
+                    radialFilter.setValue(CIColor.clear, forKey: "inputColor1")
+
+                    if let maskImage = radialFilter.outputImage?.cropped(to: maskRect) {
+                        // Composite webcam with mask
+                        maskedWebcam = scaledWebcam.applyingFilter("CIBlendWithMask", parameters: [
+                            kCIInputMaskImageKey: maskImage
+                        ])
+                    }
+                }
+            }
+
+        case .roundedRectangle, .squircle:
+            // For rounded rectangles and squircles, we'll use the full frame
+            // Shape clipping will be handled by SwiftUI in preview
+            // For recording, we keep the full rectangular frame
+            break
+        }
+
+        // Position the webcam overlay
+        let positioned = maskedWebcam.transformed(
+            by: CGAffineTransform(translationX: position.x, y: position.y)
+        )
+
+        return positioned
     }
 
     enum RecordingError: LocalizedError {

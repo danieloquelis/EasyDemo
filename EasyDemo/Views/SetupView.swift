@@ -11,6 +11,7 @@ import SwiftUI
 struct SetupView: View {
     @State private var selectedWindow: WindowInfo?
     @State private var selectedBackground: BackgroundStyle = .solidColor(.black)
+    @State private var webcamConfig = WebcamConfiguration.default
     @State private var showingWindowSelector = true
     @StateObject private var recordingEngine = RecordingEngine()
 
@@ -68,6 +69,10 @@ struct SetupView: View {
                     BackgroundSelectionView(selectedBackground: $selectedBackground)
                 }
 
+                Section("Webcam Overlay") {
+                    WebcamSettingsView(configuration: $webcamConfig)
+                }
+
                 Section("Recording") {
                     if recordingEngine.isRecording {
                         VStack(alignment: .leading, spacing: 8) {
@@ -99,7 +104,8 @@ struct SetupView: View {
                             if let window = selectedWindow {
                                 let config = RecordingConfiguration.default(
                                     window: window,
-                                    background: selectedBackground
+                                    background: selectedBackground,
+                                    webcam: webcamConfig
                                 )
                                 Task {
                                     do {

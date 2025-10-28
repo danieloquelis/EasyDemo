@@ -13,6 +13,7 @@ import AVFoundation
 struct RecordingConfiguration {
     let window: WindowInfo
     let background: BackgroundStyle
+    let webcam: WebcamConfiguration
     let resolution: Resolution
     let frameRate: Int
     let codec: VideoCodec
@@ -59,7 +60,11 @@ struct RecordingConfiguration {
         }
     }
 
-    static func `default`(window: WindowInfo, background: BackgroundStyle) -> RecordingConfiguration {
+    static func `default`(
+        window: WindowInfo,
+        background: BackgroundStyle,
+        webcam: WebcamConfiguration
+    ) -> RecordingConfiguration {
         let documentsPath = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask).first!
         let timestamp = ISO8601DateFormatter().string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
@@ -69,6 +74,7 @@ struct RecordingConfiguration {
         return RecordingConfiguration(
             window: window,
             background: background,
+            webcam: webcam,
             resolution: .original,
             frameRate: 60,
             codec: .h264,

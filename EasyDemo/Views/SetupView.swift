@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Main setup view orchestrating window selection, background choice, and preview
 struct SetupView: View {
@@ -14,6 +15,8 @@ struct SetupView: View {
     @State private var webcamConfig = WebcamConfiguration.default
     @State private var showingWindowSelector = true
     @State private var recordingResult: RecordingResult?
+    @State private var outputDirectory: URL?
+    @State private var showingFolderPicker = false
     @StateObject private var recordingEngine = RecordingEngine()
 
     var body: some View {
@@ -74,6 +77,32 @@ struct SetupView: View {
                     WebcamSettingsView(configuration: $webcamConfig)
                 }
 
+                Section("Output") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Save Location")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+
+                        Button {
+                            showingFolderPicker = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "folder")
+                                Text(outputDirectory?.lastPathComponent ?? "Movies/EasyDemo")
+                                    .lineLimit(1)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .padding(8)
+                        .background(Color(.controlBackgroundColor))
+                        .cornerRadius(8)
+                    }
+                }
+
                 Section("Recording") {
                     if recordingEngine.isRecording {
                         VStack(alignment: .leading, spacing: 8) {
@@ -107,7 +136,8 @@ struct SetupView: View {
                                 let config = RecordingConfiguration.default(
                                     window: window,
                                     background: selectedBackground,
-                                    webcam: webcamConfig
+                                    webcam: webcamConfig,
+                                    outputDirectory: outputDirectory
                                 )
                                 Task {
                                     do {
@@ -131,6 +161,20 @@ struct SetupView: View {
         }
         .sheet(item: $recordingResult) { result in
             RecordingCompletedView(result: result)
+        }
+        .fileImporter(
+            isPresented: $showingFolderPicker,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                if let url = urls.first {
+                    outputDirectory = url
+                }
+            case .failure(let error):
+                print("Failed to select folder: \(error)")
+            }
         }
     }
 

@@ -63,13 +63,25 @@ struct RecordingConfiguration {
     static func `default`(
         window: WindowInfo,
         background: BackgroundStyle,
-        webcam: WebcamConfiguration
+        webcam: WebcamConfiguration,
+        outputDirectory: URL? = nil
     ) -> RecordingConfiguration {
-        let documentsPath = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask).first!
+        // Use custom directory or create default EasyDemo folder
+        let baseDirectory: URL
+        if let customDir = outputDirectory {
+            baseDirectory = customDir
+        } else {
+            let moviesPath = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask).first!
+            baseDirectory = moviesPath.appendingPathComponent("EasyDemo", isDirectory: true)
+
+            // Create directory if it doesn't exist
+            try? FileManager.default.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
+        }
+
         let timestamp = ISO8601DateFormatter().string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
-        let filename = "EasyDemo_\(timestamp).mov"
-        let outputURL = documentsPath.appendingPathComponent(filename)
+        let filename = "Recording_\(timestamp).mov"
+        let outputURL = baseDirectory.appendingPathComponent(filename)
 
         return RecordingConfiguration(
             window: window,

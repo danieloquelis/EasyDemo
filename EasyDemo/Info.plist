@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSCameraUsageDescription</key>
+	<string>EasyDemo needs access to your camera to add webcam overlay to your recordings.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>EasyDemo needs access to your microphone to record audio with your screen recordings.</string>
+</dict>
+</plist>

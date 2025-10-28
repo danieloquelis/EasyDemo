@@ -114,12 +114,17 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         if let url = outputURL {
             print("Recording saved to: \(url.path)")
 
+            // Wait a moment for file system to flush
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+
             // Get file size
             let fileSize: Int64
             if let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
                let size = attributes[.size] as? Int64 {
                 fileSize = size
+                print("File size: \(size) bytes")
             } else {
+                print("Warning: Could not get file size for \(url.path)")
                 fileSize = 0
             }
 

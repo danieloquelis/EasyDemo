@@ -7,12 +7,15 @@
 
 import SwiftUI
 import AVKit
+import UniformTypeIdentifiers
 
 /// View shown after recording is completed
 struct RecordingCompletedView: View {
     let result: RecordingResult
     @Environment(\.dismiss) private var dismiss
     @State private var player: AVPlayer?
+    @State private var showingSavePanel = false
+    @State private var savedLocation: URL?
 
     var body: some View {
         VStack(spacing: 24) {
@@ -23,9 +26,19 @@ struct RecordingCompletedView: View {
                         .font(.title)
                         .fontWeight(.bold)
 
-                    Text("Saved to Movies folder")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                    if let saved = savedLocation {
+                        Text("Saved to: \(saved.lastPathComponent)")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    } else if result.fileURL.path.contains("tmp") || result.fileURL.path.contains("Temp") {
+                        Text("Temporary location - use Save As to keep")
+                            .font(.subheadline)
+                            .foregroundColor(.orange)
+                    } else {
+                        Text("Saved to: \(result.fileURL.deletingLastPathComponent().lastPathComponent)")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
                 }
 
                 Spacer()
@@ -91,9 +104,10 @@ struct RecordingCompletedView: View {
             // Actions
             HStack(spacing: 12) {
                 Button {
+                    let locationToShow = savedLocation ?? result.fileURL
                     NSWorkspace.shared.selectFile(
-                        result.fileURL.path,
-                        inFileViewerRootedAtPath: result.fileURL.deletingLastPathComponent().path
+                        locationToShow.path,
+                        inFileViewerRootedAtPath: locationToShow.deletingLastPathComponent().path
                     )
                 } label: {
                     Label("Show in Finder", systemImage: "folder")
@@ -101,7 +115,15 @@ struct RecordingCompletedView: View {
                 .buttonStyle(.bordered)
 
                 Button {
-                    NSWorkspace.shared.open(result.fileURL)
+                    showingSavePanel = true
+                } label: {
+                    Label("Save As...", systemImage: "square.and.arrow.down")
+                }
+                .buttonStyle(.bordered)
+
+                Button {
+                    let locationToOpen = savedLocation ?? result.fileURL
+                    NSWorkspace.shared.open(locationToOpen)
                 } label: {
                     Label("Open Video", systemImage: "play.rectangle")
                 }
@@ -127,6 +149,43 @@ struct RecordingCompletedView: View {
             player?.pause()
             player = nil
         }
+        .fileExporter(
+            isPresented: $showingSavePanel,
+            document: VideoDocument(url: result.fileURL),
+            contentType: .movie,
+            defaultFilename: result.fileURL.lastPathComponent
+        ) { result in
+            switch result {
+            case .success(let url):
+                savedLocation = url
+            case .failure(let error):
+                print("Failed to save: \(error)")
+            }
+        }
+    }
+}
+
+/// Document wrapper for video export
+struct VideoDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.movie] }
+
+    let url: URL
+
+    init(url: URL) {
+        self.url = url
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("temp.mov")
+        try data.write(to: tempURL)
+        self.url = tempURL
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        return try FileWrapper(url: url, options: .immediate)
     }
 }
 

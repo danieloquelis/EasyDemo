@@ -66,21 +66,26 @@ struct RecordingConfiguration {
         webcam: WebcamConfiguration,
         outputDirectory: URL? = nil
     ) -> RecordingConfiguration {
-        // Use custom directory or create default EasyDemo folder
+        // For sandboxed apps, we need to write to temp directory first
+        // Then move to user-selected location after recording
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+            .replacingOccurrences(of: ":", with: "-")
+        let filename = "Recording_\(timestamp).mov"
+
         let baseDirectory: URL
         if let customDir = outputDirectory {
+            // User has selected a directory - we have security-scoped access
             baseDirectory = customDir
         } else {
-            let moviesPath = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask).first!
-            baseDirectory = moviesPath.appendingPathComponent("EasyDemo", isDirectory: true)
+            // Use temporary directory for recording
+            // We'll prompt user to save after recording completes
+            baseDirectory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("EasyDemo", isDirectory: true)
 
             // Create directory if it doesn't exist
             try? FileManager.default.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
         }
 
-        let timestamp = ISO8601DateFormatter().string(from: Date())
-            .replacingOccurrences(of: ":", with: "-")
-        let filename = "Recording_\(timestamp).mov"
         let outputURL = baseDirectory.appendingPathComponent(filename)
 
         return RecordingConfiguration(

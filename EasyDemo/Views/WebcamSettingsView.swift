@@ -96,28 +96,15 @@ struct WebcamSettingsView: View {
                     Slider(value: $configuration.borderWidth, in: 0...10, step: 1)
                 }
 
-                // Preview
-                if let frame = webcam.currentFrame {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Preview")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-
-                        WebcamPreviewShape(
-                            frame: frame,
-                            shape: configuration.shape,
-                            size: configuration.size / 2,
-                            borderWidth: configuration.borderWidth / 2
-                        )
-                        .frame(height: 150)
-                    }
-                }
+                // Note about preview
+                Text("Preview will appear in the main preview area →")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .italic()
             }
         }
         .onDisappear {
-            if !configuration.isEnabled {
-                webcam.stopCapture()
-            }
+            webcam.stopCapture()
         }
     }
 }

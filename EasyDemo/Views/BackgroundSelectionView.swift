@@ -14,11 +14,25 @@ struct BackgroundSelectionView: View {
     @State private var showImagePicker = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Choose Background")
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Choose Background")
+                    .font(.headline)
 
-            ScrollView(.horizontal, showsIndicators: false) {
+                Spacer()
+
+                // Scroll indicator hint
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.left")
+                        .font(.caption2)
+                    Image(systemName: "arrow.right")
+                        .font(.caption2)
+                }
+                .foregroundColor(.secondary)
+                .opacity(0.6)
+            }
+
+            ScrollView(.horizontal, showsIndicators: true) {
                 HStack(spacing: 12) {
                     ForEach(BackgroundStyle.presets) { style in
                         BackgroundPreviewCard(
@@ -54,7 +68,9 @@ struct BackgroundSelectionView: View {
                     .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 4)
+                .padding(.vertical, 2)
             }
+            .frame(height: 120)
         }
         .fileImporter(
             isPresented: $showImagePicker,

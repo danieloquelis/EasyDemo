@@ -45,10 +45,11 @@
 
 - [x] **Permission Handling**
   - Screen recording permission with clear UI
-  - Camera permission with system settings link
+  - Camera permission with proper entitlements (device.camera, device.audio-input)
+  - Info.plist entries for permission descriptions (NSCameraUsageDescription, NSMicrophoneUsageDescription)
+  - Sandboxed app with proper entitlements file
   - Alert dialogs with actionable buttons
   - Error messages with details
-  - Info.plist entries for permission descriptions
 
 - [x] **Recording Controls**
   - Start/Stop recording buttons
@@ -83,10 +84,19 @@
 
 - ~~Background color affects entire app~~ → **FIXED**: Proper containment with Rectangle + clipped
 - ~~Select button doesn't work~~ → **FIXED**: Proper binding with tempSelection
-- ~~Webcam permission not working~~ → **FIXED**: Added Info.plist entries
+- ~~Webcam permission not working~~ → **FIXED**: Added camera/microphone entitlements to EasyDemo.entitlements
+- ~~App doesn't appear in System Settings Camera~~ → **FIXED**: Added com.apple.security.device.camera entitlement
 - ~~Video shows 0 bytes~~ → **FIXED**: Added file system flush delay
 - ~~No window thumbnails~~ → **FIXED**: SCScreenshotManager implementation
 - ~~Shows inactive windows~~ → **FIXED**: Better filtering with isOnScreen
+
+## 🐛 Current Bugs (To Fix)
+
+- [ ] **Background color list not scrollable** - Can't see all background options, missing scroll indicator
+- [ ] **Window preview is too zoomed/pixelated** - Should maintain window size with margins to show background
+- [ ] **Webcam preview not positioned correctly** - Should reflect size/position settings in preview
+- [ ] **Recording produces 0-byte files** - Video recording not writing data properly
+- [ ] **Recording completion dialog shows no preview** - Video player not loading recorded file
 
 ## 📋 Remaining Features (Not Implemented)
 
@@ -118,16 +128,18 @@
 
 ### ✅ User-Confirmed Working
 - Window selection with thumbnails
-- Recording start/stop
+- Recording start/stop controls
 - Output folder management
+- Camera permissions with proper entitlements
+- System Settings > Camera shows app correctly
 
 ### ⚠️ Needs User Testing
-- [ ] Camera permissions (awaiting macOS permission dialog confirmation)
 - [ ] Webcam overlay in actual recording
-- [ ] Video file playback after recording
+- [ ] Video file creation and playback
 - [ ] File size display accuracy
-- [ ] Background color preview isolation
+- [ ] Background color selection UX
 - [ ] Custom folder selection
+- [ ] Preview window sizing and scaling
 
 ### 🔧 Technical Testing Required
 - [ ] Long recordings (>10 minutes)
@@ -140,9 +152,11 @@
 ## 🎯 Next Steps
 
 ### Immediate Priorities
-1. **User Testing** - Verify all fixes work as expected
-2. **Camera Permissions** - Confirm permission dialog appears
-3. **Recording Validation** - Test full recording workflow end-to-end
+1. **Fix Recording Pipeline** - Resolve 0-byte video file issue
+2. **Improve Preview Scaling** - Better window sizing with visible backgrounds
+3. **Fix Background List Scrolling** - Add scroll indicators and proper ScrollView
+4. **Position Webcam in Preview** - Show webcam overlay in correct position/size
+5. **Test End-to-End Recording** - Verify complete workflow with actual video output
 
 ### Future Enhancements (If Desired)
 1. Implement basic click detection (Milestone 4 lite version)
@@ -171,4 +185,4 @@ All critical bugs have been fixed and the app provides a solid user experience.
 
 ---
 
-*Last Updated: 2025-01-28*
+*Last Updated: 2025-10-29*

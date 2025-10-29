@@ -11,40 +11,109 @@ import SwiftUI
 struct WindowPreviewView: View {
     let window: WindowInfo
     let backgroundStyle: BackgroundStyle
+    let webcamConfig: WebcamConfiguration?
     @StateObject private var preview = WindowPreview()
+    @StateObject private var webcam = WebcamCapture()
 
     var body: some View {
-        ZStack {
-            // Background layer - contained and clipped
-            backgroundView
+        GeometryReader { geometry in
+            ZStack {
+                // Background layer - contained and clipped
+                backgroundView
 
-            // Window preview layer
-            if let image = preview.previewImage {
-                Image(decorative: image, scale: 1.0)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .shadow(
-                        color: .black.opacity(0.3),
-                        radius: 20,
-                        x: 0,
-                        y: 10
+                // Window preview layer
+                if let image = preview.previewImage {
+                    let imageSize = CGSize(width: image.width, height: image.height)
+                    let scaledSize = calculatePreviewSize(
+                        imageSize: imageSize,
+                        containerSize: geometry.size
                     )
-                    .padding(40)
-            } else {
-                VStack(spacing: 16) {
-                    ProgressView()
-                        .scaleEffect(1.5)
 
-                    Text("Capturing preview...")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
+                    Image(decorative: image, scale: 1.0)
+                        .resizable()
+                        .frame(width: scaledSize.width, height: scaledSize.height)
+                        .shadow(
+                            color: .black.opacity(0.3),
+                            radius: 20,
+                            x: 0,
+                            y: 10
+                        )
+
+                    // Webcam overlay
+                    if let config = webcamConfig, config.isEnabled, let webcamFrame = webcam.currentFrame {
+                        let webcamPosition = calculateWebcamPosition(
+                            config: config,
+                            containerSize: geometry.size
+                        )
+
+                        WebcamOverlayView(
+                            frame: webcamFrame,
+                            shape: config.shape,
+                            size: config.size * 0.5,  // Scale down for preview
+                            borderWidth: config.borderWidth
+                        )
+                        .position(webcamPosition)
+                    }
+                } else {
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+
+                        Text("Capturing preview...")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipped()
         .task {
             await preview.capturePreview(window: window)
+
+            // Start webcam if enabled
+            if let config = webcamConfig, config.isEnabled {
+                try? await webcam.startCapture()
+            }
+        }
+        .onDisappear {
+            webcam.stopCapture()
+        }
+    }
+
+    /// Calculate appropriate preview size to maintain quality while showing background
+    private func calculatePreviewSize(imageSize: CGSize, containerSize: CGSize) -> CGSize {
+        let minMargin: CGFloat = 80  // Minimum margin to always show background
+        let availableWidth = containerSize.width - (minMargin * 2)
+        let availableHeight = containerSize.height - (minMargin * 2)
+
+        // Calculate scale to fit within available space
+        let widthScale = availableWidth / imageSize.width
+        let heightScale = availableHeight / imageSize.height
+        let scale = min(widthScale, heightScale, 1.0)  // Never scale up beyond original size
+
+        return CGSize(
+            width: imageSize.width * scale,
+            height: imageSize.height * scale
+        )
+    }
+
+    /// Calculate webcam overlay position based on configuration
+    private func calculateWebcamPosition(config: WebcamConfiguration, containerSize: CGSize) -> CGPoint {
+        let padding: CGFloat = 40
+        let size = config.size * 0.5  // Match the scaled size
+
+        switch config.position {
+        case .topLeft:
+            return CGPoint(x: padding + size / 2, y: padding + size / 2)
+        case .topRight:
+            return CGPoint(x: containerSize.width - padding - size / 2, y: padding + size / 2)
+        case .bottomLeft:
+            return CGPoint(x: padding + size / 2, y: containerSize.height - padding - size / 2)
+        case .bottomRight:
+            return CGPoint(x: containerSize.width - padding - size / 2, y: containerSize.height - padding - size / 2)
+        case .custom:
+            return CGPoint(x: containerSize.width / 2, y: containerSize.height / 2)
         }
     }
 
@@ -87,6 +156,48 @@ struct WindowPreviewView: View {
     }
 }
 
+/// Webcam overlay view for preview
+struct WebcamOverlayView: View {
+    let frame: CIImage
+    let shape: WebcamConfiguration.Shape
+    let size: CGFloat
+    let borderWidth: CGFloat
+
+    var body: some View {
+        let ciContext = CIContext()
+        if let cgImage = ciContext.createCGImage(frame, from: frame.extent) {
+            switch shape {
+            case .circle:
+                Image(decorative: cgImage, scale: 1.0)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: size, height: size)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.white, lineWidth: borderWidth))
+
+            case .roundedRectangle:
+                Image(decorative: cgImage, scale: 1.0)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: size, height: size)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white, lineWidth: borderWidth))
+
+            case .squircle:
+                Image(decorative: cgImage, scale: 1.0)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: size, height: size)
+                    .clipShape(RoundedRectangle(cornerRadius: size / 4, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: size / 4, style: .continuous)
+                            .stroke(Color.white, lineWidth: borderWidth)
+                    )
+            }
+        }
+    }
+}
+
 #Preview {
     WindowPreviewView(
         window: WindowInfo(
@@ -98,6 +209,7 @@ struct WindowPreviewView: View {
             alpha: 1.0,
             scWindow: nil
         ),
-        backgroundStyle: .solidColor(.black)
+        backgroundStyle: .solidColor(.black),
+        webcamConfig: nil
     )
 }

@@ -29,7 +29,8 @@ struct SetupView: View {
             if let window = selectedWindow {
                 WindowPreviewView(
                     window: window,
-                    backgroundStyle: selectedBackground
+                    backgroundStyle: selectedBackground,
+                    webcamConfig: webcamConfig
                 )
                 .navigationTitle("Preview")
             } else {

@@ -24,6 +24,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		03C25D6D51B8253E0C30C237 /* EasyDemo.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = EasyDemo.entitlements; path = EasyDemo/EasyDemo.entitlements; sourceTree = "<group>"; };
 		FBC949AD2EB04F5F00E00412 /* EasyDemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EasyDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FBC949BA2EB04F6100E00412 /* EasyDemoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EasyDemoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FBC949C42EB04F6100E00412 /* EasyDemoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EasyDemoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -32,16 +33,22 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		FBC949AF2EB04F5F00E00412 /* EasyDemo */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = EasyDemo;
 			sourceTree = "<group>";
 		};
 		FBC949BD2EB04F6100E00412 /* EasyDemoTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = EasyDemoTests;
 			sourceTree = "<group>";
 		};
 		FBC949C72EB04F6100E00412 /* EasyDemoUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = EasyDemoUITests;
 			sourceTree = "<group>";
 		};
@@ -79,6 +86,7 @@
 				FBC949BD2EB04F6100E00412 /* EasyDemoTests */,
 				FBC949C72EB04F6100E00412 /* EasyDemoUITests */,
 				FBC949AE2EB04F5F00E00412 /* Products */,
+				03C25D6D51B8253E0C30C237 /* EasyDemo.entitlements */,
 			);
 			sourceTree = "<group>";
 		};
@@ -111,8 +119,6 @@
 				FBC949AF2EB04F5F00E00412 /* EasyDemo */,
 			);
 			name = EasyDemo;
-			packageProductDependencies = (
-			);
 			productName = EasyDemo;
 			productReference = FBC949AD2EB04F5F00E00412 /* EasyDemo.app */;
 			productType = "com.apple.product-type.application";
@@ -134,8 +140,6 @@
 				FBC949BD2EB04F6100E00412 /* EasyDemoTests */,
 			);
 			name = EasyDemoTests;
-			packageProductDependencies = (
-			);
 			productName = EasyDemoTests;
 			productReference = FBC949BA2EB04F6100E00412 /* EasyDemoTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -157,8 +161,6 @@
 				FBC949C72EB04F6100E00412 /* EasyDemoUITests */,
 			);
 			name = EasyDemoUITests;
-			packageProductDependencies = (
-			);
 			productName = EasyDemoUITests;
 			productReference = FBC949C42EB04F6100E00412 /* EasyDemoUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -394,6 +396,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = EasyDemo/EasyDemo.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -434,6 +437,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = EasyDemo/EasyDemo.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;

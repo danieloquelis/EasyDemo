@@ -92,11 +92,20 @@
 
 ## 🐛 Current Bugs (To Fix)
 
-- [ ] **Background color list not scrollable** - Can't see all background options, missing scroll indicator
-- [ ] **Window preview is too zoomed/pixelated** - Should maintain window size with margins to show background
-- [ ] **Webcam preview not positioned correctly** - Should reflect size/position settings in preview
-- [ ] **Recording produces 0-byte files** - Video recording not writing data properly
-- [ ] **Recording completion dialog shows no preview** - Video player not loading recorded file
+### Critical - Recording Quality Issues
+- [ ] **Background not rendered in recording** - Background shows in preview but not in final video
+- [ ] **Webcam quality very low in recording** - Camera feed appears low resolution/quality
+- [ ] **Webcam position/rendering broken** - Shows as semicircle, wrong position, missing borders
+- [ ] **Webcam performance very slow/laggy** - Preview updates slowly, not smooth
+
+### UI/UX Issues
+- [ ] **Chevron buttons look ugly** - Remove chevrons, make backgrounds naturally scrollable
+- [ ] **Webcam preview not showing in main preview** - Circle camera preview doesn't appear in preview area
+
+### Recently Fixed (Partially Working)
+- [x] **Recording now saves files** - Videos create successfully using temp directory + Save As
+- [x] **Video playback works** - Recorded videos play in completion dialog
+- [x] **File size detection** - Proper file size shown in completion dialog
 
 ## 📋 Remaining Features (Not Implemented)
 
@@ -151,12 +160,19 @@
 
 ## 🎯 Next Steps
 
-### Immediate Priorities
-1. **Fix Recording Pipeline** - Resolve 0-byte video file issue
-2. **Improve Preview Scaling** - Better window sizing with visible backgrounds
-3. **Fix Background List Scrolling** - Add scroll indicators and proper ScrollView
-4. **Position Webcam in Preview** - Show webcam overlay in correct position/size
-5. **Test End-to-End Recording** - Verify complete workflow with actual video output
+### Immediate Priorities (Critical Bugs)
+1. **Fix Background Rendering in Recording** - Background shows in preview but not in recorded video
+2. **Fix Webcam Rendering Pipeline** - Webcam shows as semicircle, wrong position, missing borders, very slow
+3. **Improve Webcam Quality** - Low quality camera feed in recording
+4. **Fix Webcam Preview Visibility** - Webcam not appearing in main preview area
+5. **Simplify Background Scrolling UI** - Remove ugly chevron buttons, make naturally scrollable
+
+### Debug Information
+- Recording saves to temp directory successfully
+- Video file is created and playable
+- Preview shows correct composition (window + background + webcam)
+- Recording shows ONLY window (no background, broken webcam)
+- Issue likely in RecordingEngine.swift composition pipeline
 
 ### Future Enhancements (If Desired)
 1. Implement basic click detection (Milestone 4 lite version)
@@ -176,13 +192,23 @@
 
 ## 🚀 Project Status
 
-**Current State**: ✅ **Production Ready for Basic Use**
+**Current State**: 🔧 **In Development - Recording Quality Issues**
 
-The app is fully functional for core use cases:
-- Select window → Choose background → Record → Preview → Export
+**What Works:**
+- ✅ Window selection with thumbnails
+- ✅ Live preview with background + window + webcam
+- ✅ Recording creates video files
+- ✅ Camera permissions working
+- ✅ Save As dialog for file export
 
-All critical bugs have been fixed and the app provides a solid user experience.
+**What's Broken:**
+- ❌ Background not included in recording (preview ≠ recording)
+- ❌ Webcam rendering broken (semicircle, wrong position, slow)
+- ❌ Webcam quality very low in recording
+- ❌ Webcam not visible in preview area
+
+**Next:** Fix RecordingEngine composition pipeline to match preview quality
 
 ---
 
-*Last Updated: 2025-10-29*
+*Last Updated: 2025-10-29 20:15 - Post recording tests, multiple quality issues found*

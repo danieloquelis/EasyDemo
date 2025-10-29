@@ -12,104 +12,51 @@ import UniformTypeIdentifiers
 struct BackgroundSelectionView: View {
     @Binding var selectedBackground: BackgroundStyle
     @State private var showImagePicker = false
-    @State private var scrollOffset: CGFloat = 0
-    @State private var isHovering = false
-    @State private var canScrollLeft = false
-    @State private var canScrollRight = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Choose Background")
                 .font(.headline)
 
-            ZStack(alignment: .center) {
-                ScrollViewReader { proxy in
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
-                            ForEach(BackgroundStyle.presets) { style in
-                                BackgroundPreviewCard(
-                                    style: style,
-                                    isSelected: style.id == selectedBackground.id
-                                )
-                                .id(style.id)
-                                .onTapGesture {
-                                    selectedBackground = style
-                                }
-                            }
-
-                            // Custom image button
-                            Button {
-                                showImagePicker = true
-                            } label: {
-                                VStack(spacing: 8) {
-                                    Image(systemName: "photo.badge.plus")
-                                        .font(.system(size: 32))
-                                        .foregroundColor(.secondary)
-
-                                    Text("Custom Image")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                .frame(width: 100, height: 100)
-                                .background(Color(.controlBackgroundColor))
-                                .cornerRadius(12)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .id("custom")
-                        }
-                        .padding(.horizontal, 40)
-                        .padding(.vertical, 2)
-                    }
-                    .frame(height: 120)
-
-                    // Left chevron
-                    if isHovering && canScrollLeft {
-                        HStack {
-                            Button {
-                                scrollToPrevious(proxy: proxy)
-                            } label: {
-                                Image(systemName: "chevron.left")
-                                    .font(.title2)
-                                    .foregroundColor(.white)
-                                    .padding(8)
-                                    .background(Color.black.opacity(0.5))
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.leading, 8)
-
-                            Spacer()
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(BackgroundStyle.presets) { style in
+                        BackgroundPreviewCard(
+                            style: style,
+                            isSelected: style.id == selectedBackground.id
+                        )
+                        .onTapGesture {
+                            selectedBackground = style
                         }
                     }
 
-                    // Right chevron
-                    if isHovering && canScrollRight {
-                        HStack {
-                            Spacer()
+                    // Custom image button
+                    Button {
+                        showImagePicker = true
+                    } label: {
+                        VStack(spacing: 8) {
+                            Image(systemName: "photo.badge.plus")
+                                .font(.system(size: 32))
+                                .foregroundColor(.secondary)
 
-                            Button {
-                                scrollToNext(proxy: proxy)
-                            } label: {
-                                Image(systemName: "chevron.right")
-                                    .font(.title2)
-                                    .foregroundColor(.white)
-                                    .padding(8)
-                                    .background(Color.black.opacity(0.5))
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.trailing, 8)
+                            Text("Custom Image")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
+                        .frame(width: 100, height: 100)
+                        .background(Color(.controlBackgroundColor))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                        )
                     }
+                    .buttonStyle(.plain)
                 }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
             }
-            .onHover { hovering in
-                isHovering = hovering
-            }
+            .frame(height: 120)
         }
         .fileImporter(
             isPresented: $showImagePicker,
@@ -124,46 +71,6 @@ struct BackgroundSelectionView: View {
             case .failure(let error):
                 print("Failed to select image: \(error)")
             }
-        }
-    }
-
-    private func scrollToPrevious(proxy: ScrollViewProxy) {
-        guard let currentIndex = BackgroundStyle.presets.firstIndex(where: { $0.id == selectedBackground.id }) else { return }
-
-        if currentIndex > 0 {
-            let previousStyle = BackgroundStyle.presets[currentIndex - 1]
-            withAnimation {
-                proxy.scrollTo(previousStyle.id, anchor: .center)
-            }
-            canScrollLeft = currentIndex > 1
-            canScrollRight = true
-        } else {
-            canScrollLeft = false
-        }
-    }
-
-    private func scrollToNext(proxy: ScrollViewProxy) {
-        guard let currentIndex = BackgroundStyle.presets.firstIndex(where: { $0.id == selectedBackground.id }) else {
-            if !BackgroundStyle.presets.isEmpty {
-                withAnimation {
-                    proxy.scrollTo(BackgroundStyle.presets[0].id, anchor: .center)
-                }
-            }
-            return
-        }
-
-        if currentIndex < BackgroundStyle.presets.count - 1 {
-            let nextStyle = BackgroundStyle.presets[currentIndex + 1]
-            withAnimation {
-                proxy.scrollTo(nextStyle.id, anchor: .center)
-            }
-            canScrollLeft = true
-            canScrollRight = currentIndex < BackgroundStyle.presets.count - 2
-        } else {
-            withAnimation {
-                proxy.scrollTo("custom", anchor: .center)
-            }
-            canScrollRight = false
         }
     }
 }

@@ -252,22 +252,27 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         _ windowBuffer: CVPixelBuffer,
         configuration: RecordingConfiguration
     ) -> CVPixelBuffer? {
-        // Create output pixel buffer
-        var outputBuffer: CVPixelBuffer?
-        let width = CVPixelBufferGetWidth(windowBuffer)
-        let height = CVPixelBufferGetHeight(windowBuffer)
+        let windowWidth = CVPixelBufferGetWidth(windowBuffer)
+        let windowHeight = CVPixelBufferGetHeight(windowBuffer)
 
+        // Add margins to show background (same as preview - 80px margin)
+        let margin: CGFloat = 160  // 80px on each side = 160 total
+        let outputWidth = windowWidth + Int(margin)
+        let outputHeight = windowHeight + Int(margin)
+
+        // Create output pixel buffer with margins
+        var outputBuffer: CVPixelBuffer?
         let attributes: [String: Any] = [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-            kCVPixelBufferWidthKey as String: width,
-            kCVPixelBufferHeightKey as String: height,
+            kCVPixelBufferWidthKey as String: outputWidth,
+            kCVPixelBufferHeightKey as String: outputHeight,
             kCVPixelBufferMetalCompatibilityKey as String: true
         ]
 
         CVPixelBufferCreate(
             kCFAllocatorDefault,
-            width,
-            height,
+            outputWidth,
+            outputHeight,
             kCVPixelFormatType_32BGRA,
             attributes as CFDictionary,
             &outputBuffer
@@ -275,24 +280,29 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
 
         guard let output = outputBuffer else { return nil }
 
-        // Compose background + window
-        let windowImage = CIImage(cvPixelBuffer: windowBuffer)
-
-        // Create background image
+        // Create background image at full output size
         let backgroundImage = createBackgroundImage(
-            size: CGSize(width: width, height: height),
+            size: CGSize(width: outputWidth, height: outputHeight),
             style: configuration.background
         )
 
-        // Composite: background + window
-        var composited = windowImage.composited(over: backgroundImage)
+        // Window image centered on canvas
+        let windowImage = CIImage(cvPixelBuffer: windowBuffer)
+        let xOffset = margin / 2
+        let yOffset = margin / 2
+        let centeredWindow = windowImage.transformed(
+            by: CGAffineTransform(translationX: xOffset, y: yOffset)
+        )
+
+        // Composite: window over background
+        var composited = centeredWindow.composited(over: backgroundImage)
 
         // Add webcam overlay if enabled
         if configuration.webcam.isEnabled, let webcamFrame = webcamCapture?.currentFrame {
             let webcamOverlay = createWebcamOverlay(
                 webcamFrame: webcamFrame,
                 configuration: configuration.webcam,
-                canvasSize: CGSize(width: width, height: height)
+                canvasSize: CGSize(width: outputWidth, height: outputHeight)
             )
             composited = webcamOverlay.composited(over: composited)
         }
@@ -365,54 +375,96 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         let size = configuration.size
         let padding: CGFloat = 40
 
-        // Scale webcam to desired size
-        let scale = size / max(webcamFrame.extent.width, webcamFrame.extent.height)
+        // Scale webcam to fill the target size (aspect fill)
+        let targetSize = CGSize(width: size, height: size)
+        let webcamAspect = webcamFrame.extent.width / webcamFrame.extent.height
+        let targetAspect = targetSize.width / targetSize.height
+
+        var scale: CGFloat
+        var offsetX: CGFloat = 0
+        var offsetY: CGFloat = 0
+
+        if webcamAspect > targetAspect {
+            // Webcam is wider - fit height, crop width
+            scale = targetSize.height / webcamFrame.extent.height
+            offsetX = (webcamFrame.extent.width * scale - targetSize.width) / 2
+        } else {
+            // Webcam is taller - fit width, crop height
+            scale = targetSize.width / webcamFrame.extent.width
+            offsetY = (webcamFrame.extent.height * scale - targetSize.height) / 2
+        }
+
+        // Scale and center crop
         let scaledWebcam = webcamFrame
             .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-            .cropped(to: CGRect(x: 0, y: 0, width: size, height: size))
+            .cropped(to: CGRect(
+                x: offsetX,
+                y: offsetY,
+                width: targetSize.width,
+                height: targetSize.height
+            ))
 
-        // Calculate position
+        // Calculate position on canvas
         let position = configuration.position.offset(
             in: canvasSize,
             webcamSize: size,
             padding: padding
         )
 
-        // Apply shape mask using CIFilter
+        // Apply shape mask
         var maskedWebcam = scaledWebcam
 
         switch configuration.shape {
         case .circle:
-            if let filter = CIFilter(name: "CIMaskToAlpha") {
-                // Create circular mask
-                let maskSize = size
-                let maskRect = CGRect(origin: .zero, size: CGSize(width: maskSize, height: maskSize))
+            // Create circular mask with proper dimensions
+            let maskRect = CGRect(origin: .zero, size: targetSize)
 
-                // Generate circle mask using CIRadialGradient
-                if let radialFilter = CIFilter(name: "CIRadialGradient") {
-                    radialFilter.setValue(CIVector(x: maskSize/2, y: maskSize/2), forKey: "inputCenter")
-                    radialFilter.setValue(maskSize/2, forKey: "inputRadius0")
-                    radialFilter.setValue(maskSize/2 + 1, forKey: "inputRadius1")
-                    radialFilter.setValue(CIColor.white, forKey: "inputColor0")
-                    radialFilter.setValue(CIColor.clear, forKey: "inputColor1")
+            if let radialFilter = CIFilter(name: "CIRadialGradient") {
+                radialFilter.setValue(CIVector(x: targetSize.width/2, y: targetSize.height/2), forKey: "inputCenter")
+                radialFilter.setValue(targetSize.width/2 - 1, forKey: "inputRadius0")  // Slightly smaller to avoid edge artifacts
+                radialFilter.setValue(targetSize.width/2, forKey: "inputRadius1")
+                radialFilter.setValue(CIColor.white, forKey: "inputColor0")
+                radialFilter.setValue(CIColor.clear, forKey: "inputColor1")
 
-                    if let maskImage = radialFilter.outputImage?.cropped(to: maskRect) {
-                        // Composite webcam with mask
-                        maskedWebcam = scaledWebcam.applyingFilter("CIBlendWithMask", parameters: [
-                            kCIInputMaskImageKey: maskImage
-                        ])
+                if let maskImage = radialFilter.outputImage?.cropped(to: maskRect) {
+                    maskedWebcam = scaledWebcam.applyingFilter("CIBlendWithMask", parameters: [
+                        kCIInputMaskImageKey: maskImage
+                    ])
+                }
+            }
+
+            // Add border if specified
+            if configuration.borderWidth > 0 {
+                if let borderFilter = CIFilter(name: "CIConstantColorGenerator") {
+                    borderFilter.setValue(CIColor.white, forKey: kCIInputColorKey)
+                    if let borderColor = borderFilter.outputImage {
+                        // Create ring mask for border
+                        if let borderMask = CIFilter(name: "CIRadialGradient") {
+                            let innerRadius = targetSize.width/2 - configuration.borderWidth - 1
+                            let outerRadius = targetSize.width/2 - 1
+                            borderMask.setValue(CIVector(x: targetSize.width/2, y: targetSize.height/2), forKey: "inputCenter")
+                            borderMask.setValue(innerRadius, forKey: "inputRadius0")
+                            borderMask.setValue(outerRadius, forKey: "inputRadius1")
+                            borderMask.setValue(CIColor.clear, forKey: "inputColor0")
+                            borderMask.setValue(CIColor.white, forKey: "inputColor1")
+
+                            if let borderMaskImage = borderMask.outputImage?.cropped(to: maskRect) {
+                                let borderedColor = borderColor.applyingFilter("CIBlendWithMask", parameters: [
+                                    kCIInputMaskImageKey: borderMaskImage
+                                ])
+                                maskedWebcam = borderedColor.composited(over: maskedWebcam)
+                            }
+                        }
                     }
                 }
             }
 
         case .roundedRectangle, .squircle:
-            // For rounded rectangles and squircles, we'll use the full frame
-            // Shape clipping will be handled by SwiftUI in preview
-            // For recording, we keep the full rectangular frame
+            // Keep rectangular for now - can add rounded corner filters later
             break
         }
 
-        // Position the webcam overlay
+        // Position the webcam overlay on canvas
         let positioned = maskedWebcam.transformed(
             by: CGAffineTransform(translationX: position.x, y: position.y)
         )

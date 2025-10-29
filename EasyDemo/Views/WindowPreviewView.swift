@@ -163,9 +163,14 @@ struct WebcamOverlayView: View {
     let size: CGFloat
     let borderWidth: CGFloat
 
+    // Reuse CIContext for performance
+    private static let ciContext = CIContext(options: [
+        .useSoftwareRenderer: false,
+        .priorityRequestLow: false
+    ])
+
     var body: some View {
-        let ciContext = CIContext()
-        if let cgImage = ciContext.createCGImage(frame, from: frame.extent) {
+        if let cgImage = Self.ciContext.createCGImage(frame, from: frame.extent) {
             switch shape {
             case .circle:
                 Image(decorative: cgImage, scale: 1.0)

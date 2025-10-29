@@ -33,22 +33,16 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		FBC949AF2EB04F5F00E00412 /* EasyDemo */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = EasyDemo;
 			sourceTree = "<group>";
 		};
 		FBC949BD2EB04F6100E00412 /* EasyDemoTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = EasyDemoTests;
 			sourceTree = "<group>";
 		};
 		FBC949C72EB04F6100E00412 /* EasyDemoUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = EasyDemoUITests;
 			sourceTree = "<group>";
 		};

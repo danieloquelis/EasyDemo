@@ -31,6 +31,7 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
     private var frameCount: Int64 = 0
     private var durationTimer: Timer?
     private var captureScaleFactor: CGFloat = 2.0  // Store the actual scale factor from SCContentFilter
+    private var targetOutputSize: CGSize = .zero  // Target output size for upscaling
 
     // Background rendering
     private let ciContext = CIContext()
@@ -182,13 +183,22 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
             )
         }
 
+        // Store the target output size for upscaling in composeFrame
+        self.targetOutputSize = outputSize
+
         print("  - Output video size: \(Int(outputSize.width))×\(Int(outputSize.height)) px")
 
         // Configure video settings with high quality for professional output
         // Calculate adaptive bitrate based on resolution (higher res = higher bitrate)
         let pixelCount = outputSize.width * outputSize.height
-        let bitsPerPixel: CGFloat = 0.15  // Professional quality: 0.1-0.2 bits per pixel at 60fps
+        let is4K = pixelCount >= 3840 * 2160 * 0.9  // ~4K resolution
+        let bitsPerPixel: CGFloat = is4K ? 0.2 : 0.15  // Higher quality for 4K
         let targetBitrate = Int(pixelCount * bitsPerPixel * CGFloat(configuration.frameRate))
+
+        // Recommend HEVC for 4K recordings (better compression)
+        if is4K && configuration.codec == .h264 {
+            print("  ⚠️  Tip: Use HEVC codec for better 4K compression and quality")
+        }
 
         print("  - Target bitrate: \(targetBitrate / 1_000_000) Mbps")
 
@@ -306,22 +316,42 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         // Use the exact scale factor from SCContentFilter for pixel-perfect composition
         let marginInPoints: CGFloat = 80  // 80pt on each side
         let marginInPixels = Int(marginInPoints * 2 * captureScaleFactor)  // *2 for both sides
-        let outputWidth = windowWidth + marginInPixels
-        let outputHeight = windowHeight + marginInPixels
 
-        // Create output pixel buffer with margins
+        // Calculate native composition size (before any upscaling)
+        let nativeWidth = windowWidth + marginInPixels
+        let nativeHeight = windowHeight + marginInPixels
+
+        // Determine final output dimensions (may be upscaled for 4K)
+        let finalWidth: Int
+        let finalHeight: Int
+        let needsUpscaling: Bool
+
+        if targetOutputSize != .zero &&
+           (Int(targetOutputSize.width) != nativeWidth || Int(targetOutputSize.height) != nativeHeight) {
+            // User selected a specific resolution (e.g., 4K) - upscale to fit
+            finalWidth = Int(targetOutputSize.width)
+            finalHeight = Int(targetOutputSize.height)
+            needsUpscaling = true
+        } else {
+            // Use native resolution
+            finalWidth = nativeWidth
+            finalHeight = nativeHeight
+            needsUpscaling = false
+        }
+
+        // Create output pixel buffer at final size
         var outputBuffer: CVPixelBuffer?
         let attributes: [String: Any] = [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-            kCVPixelBufferWidthKey as String: outputWidth,
-            kCVPixelBufferHeightKey as String: outputHeight,
+            kCVPixelBufferWidthKey as String: finalWidth,
+            kCVPixelBufferHeightKey as String: finalHeight,
             kCVPixelBufferMetalCompatibilityKey as String: true
         ]
 
         CVPixelBufferCreate(
             kCFAllocatorDefault,
-            outputWidth,
-            outputHeight,
+            finalWidth,
+            finalHeight,
             kCVPixelFormatType_32BGRA,
             attributes as CFDictionary,
             &outputBuffer
@@ -329,9 +359,9 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
 
         guard let output = outputBuffer else { return nil }
 
-        // Create background image at full output size
-        let backgroundImage = createBackgroundImage(
-            size: CGSize(width: outputWidth, height: outputHeight),
+        // Create background image at native composition size first
+        let nativeBackgroundImage = createBackgroundImage(
+            size: CGSize(width: nativeWidth, height: nativeHeight),
             style: configuration.background
         )
 
@@ -344,16 +374,61 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         )
 
         // Composite: window over background
-        var composited = centeredWindow.composited(over: backgroundImage)
+        var composited = centeredWindow.composited(over: nativeBackgroundImage)
 
-        // Add webcam overlay if enabled
+        // Add webcam overlay if enabled (at native size)
         if configuration.webcam.isEnabled, let webcamFrame = webcamCapture?.currentFrame {
             let webcamOverlay = createWebcamOverlay(
                 webcamFrame: webcamFrame,
                 configuration: configuration.webcam,
-                canvasSize: CGSize(width: outputWidth, height: outputHeight)
+                canvasSize: CGSize(width: nativeWidth, height: nativeHeight)
             )
             composited = webcamOverlay.composited(over: composited)
+        }
+
+        // Upscale to target resolution if needed (e.g., for 4K output)
+        if needsUpscaling {
+            // Calculate scale factor to fit content within target resolution while preserving aspect ratio
+            let nativeAspect = CGFloat(nativeWidth) / CGFloat(nativeHeight)
+            let targetAspect = CGFloat(finalWidth) / CGFloat(finalHeight)
+
+            let scaledWidth: CGFloat
+            let scaledHeight: CGFloat
+
+            if nativeAspect > targetAspect {
+                // Native is wider - fit to width
+                scaledWidth = CGFloat(finalWidth)
+                scaledHeight = scaledWidth / nativeAspect
+            } else {
+                // Native is taller - fit to height
+                scaledHeight = CGFloat(finalHeight)
+                scaledWidth = scaledHeight * nativeAspect
+            }
+
+            let scale = scaledWidth / CGFloat(nativeWidth)
+
+            // Apply Lanczos scale filter for high-quality upscaling
+            let scaled = composited.applyingFilter("CILanczosScaleTransform", parameters: [
+                "inputScale": scale,
+                "inputAspectRatio": 1.0
+            ])
+
+            // Center the scaled image on a background that fills the target resolution
+            let xOffset = (CGFloat(finalWidth) - scaledWidth) / 2
+            let yOffset = (CGFloat(finalHeight) - scaledHeight) / 2
+
+            let centered = scaled.transformed(by: CGAffineTransform(translationX: xOffset, y: yOffset))
+
+            // Create a black background at target resolution
+            let targetBackground = CIImage(color: CIColor.black)
+                .cropped(to: CGRect(x: 0, y: 0, width: finalWidth, height: finalHeight))
+
+            // Composite centered content over black background
+            composited = centered.composited(over: targetBackground)
+
+            if frameCount == 1 {
+                print("  - Upscaling: \(nativeWidth)×\(nativeHeight) → \(Int(scaledWidth))×\(Int(scaledHeight)) centered in \(finalWidth)×\(finalHeight) (Lanczos, aspect preserved)")
+            }
         }
 
         // Render to output buffer

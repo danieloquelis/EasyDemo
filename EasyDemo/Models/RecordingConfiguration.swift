@@ -64,6 +64,9 @@ struct RecordingConfiguration {
         window: WindowInfo,
         background: BackgroundStyle,
         webcam: WebcamConfiguration,
+        resolution: Resolution = .original,
+        frameRate: Int = 60,
+        codec: VideoCodec = .h264,
         outputDirectory: URL? = nil
     ) -> RecordingConfiguration {
         // For sandboxed apps, we need to write to temp directory first
@@ -92,9 +95,9 @@ struct RecordingConfiguration {
             window: window,
             background: background,
             webcam: webcam,
-            resolution: .original,
-            frameRate: 60,
-            codec: .h264,
+            resolution: resolution,
+            frameRate: frameRate,
+            codec: codec,
             outputURL: outputURL
         )
     }

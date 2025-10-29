@@ -13,7 +13,11 @@ struct SetupView: View {
     @State private var selectedWindow: WindowInfo?
     @State private var selectedBackground: BackgroundStyle = .solidColor(.black)
     @State private var webcamConfig = WebcamConfiguration.default
+    @State private var selectedResolution: RecordingConfiguration.Resolution = .original
+    @State private var selectedCodec: RecordingConfiguration.VideoCodec = .h264
+    @State private var frameRate: Int = 60
     @State private var showingWindowSelector = true
+    @State private var showAdvancedSettings = false
     @State private var recordingResult: RecordingResult?
     @State private var outputDirectory: URL?
     @State private var showingFolderPicker = false
@@ -78,6 +82,29 @@ struct SetupView: View {
                     WebcamSettingsView(configuration: $webcamConfig)
                 }
 
+                Section {
+                    DisclosureGroup(
+                        isExpanded: $showAdvancedSettings,
+                        content: {
+                            RecordingSettingsView(
+                                selectedResolution: $selectedResolution,
+                                selectedCodec: $selectedCodec,
+                                frameRate: $frameRate
+                            )
+                            .padding(.top, 8)
+                        },
+                        label: {
+                            HStack {
+                                Image(systemName: "gearshape.2")
+                                    .foregroundColor(.secondary)
+                                Text("Advanced Quality Settings")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                            }
+                        }
+                    )
+                }
+
                 Section("Output") {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Save Location")
@@ -138,6 +165,9 @@ struct SetupView: View {
                                     window: window,
                                     background: selectedBackground,
                                     webcam: webcamConfig,
+                                    resolution: selectedResolution,
+                                    frameRate: frameRate,
+                                    codec: selectedCodec,
                                     outputDirectory: outputDirectory
                                 )
                                 Task {

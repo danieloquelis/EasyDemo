@@ -30,6 +30,7 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
     private var startTime: CMTime?
     private var frameCount: Int64 = 0
     private var durationTimer: Timer?
+    private var captureScaleFactor: CGFloat = 2.0  // Store the actual scale factor from SCContentFilter
 
     // Background rendering
     private let ciContext = CIContext()
@@ -47,11 +48,27 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         self.startTime = nil
         self.recordingDuration = 0
 
-        // Set up AVAssetWriter
+        // Get the scale factor FIRST before setting up the writer
+        // We need this to calculate the correct output dimensions
+        let content = try await SCShareableContent.current
+        guard let scWindow = content.windows.first(where: {
+            $0.windowID == configuration.window.id
+        }) else {
+            throw RecordingError.windowNotFound
+        }
+        let filter = SCContentFilter(desktopIndependentWindow: scWindow)
+        self.captureScaleFactor = CGFloat(filter.pointPixelScale)
+
+        print("🎥 Recording Setup:")
+        print("  - Window bounds (points): \(configuration.window.bounds.size)")
+        print("  - Scale factor: \(captureScaleFactor)x")
+        print("  - Expected capture size: \(Int(configuration.window.bounds.width * captureScaleFactor))×\(Int(configuration.window.bounds.height * captureScaleFactor)) px")
+
+        // Set up AVAssetWriter (now has correct scale factor)
         try setupAssetWriter(configuration: configuration)
 
         // Set up SCStream
-        try await setupStream(configuration: configuration)
+        try await setupStream(configuration: configuration, filter: filter)
 
         // Set up webcam if enabled
         if configuration.webcam.isEnabled {
@@ -144,23 +161,47 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
     private func setupAssetWriter(configuration: RecordingConfiguration) throws {
         let writer = try AVAssetWriter(url: configuration.outputURL, fileType: .mov)
 
-        // Determine output size
+        // Determine output size - MUST account for pixel scale and margins
+        // The actual frames we compose will be at native pixel resolution with margins added
         let outputSize: CGSize
         if let resolution = configuration.resolution.dimensions {
             outputSize = resolution
         } else {
-            outputSize = configuration.window.bounds.size
+            // Calculate the actual pixel dimensions we'll be composing
+            // Window bounds are in points, multiply by scale factor for pixels
+            let windowPixelWidth = configuration.window.bounds.width * captureScaleFactor
+            let windowPixelHeight = configuration.window.bounds.height * captureScaleFactor
+
+            // Add margins (80pt on each side = 160pt total, scaled to pixels)
+            let marginInPoints: CGFloat = 80
+            let marginInPixels = marginInPoints * 2 * captureScaleFactor
+
+            outputSize = CGSize(
+                width: windowPixelWidth + marginInPixels,
+                height: windowPixelHeight + marginInPixels
+            )
         }
 
-        // Configure video settings
+        print("  - Output video size: \(Int(outputSize.width))×\(Int(outputSize.height)) px")
+
+        // Configure video settings with high quality for professional output
+        // Calculate adaptive bitrate based on resolution (higher res = higher bitrate)
+        let pixelCount = outputSize.width * outputSize.height
+        let bitsPerPixel: CGFloat = 0.15  // Professional quality: 0.1-0.2 bits per pixel at 60fps
+        let targetBitrate = Int(pixelCount * bitsPerPixel * CGFloat(configuration.frameRate))
+
+        print("  - Target bitrate: \(targetBitrate / 1_000_000) Mbps")
+
         let videoSettings: [String: Any] = [
             AVVideoCodecKey: configuration.codec.avCodecType,
             AVVideoWidthKey: Int(outputSize.width),
             AVVideoHeightKey: Int(outputSize.height),
             AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: 20_000_000,
+                AVVideoAverageBitRateKey: max(targetBitrate, 30_000_000),  // Minimum 30 Mbps for high quality
+                AVVideoMaxKeyFrameIntervalKey: configuration.frameRate * 2,  // Keyframe every 2 seconds
                 AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
-                AVVideoExpectedSourceFrameRateKey: configuration.frameRate
+                AVVideoExpectedSourceFrameRateKey: configuration.frameRate,
+                AVVideoQualityKey: 0.9  // High quality (0.0-1.0 scale)
             ]
         ]
 
@@ -196,23 +237,22 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         self.startTime = startTime
     }
 
-    private func setupStream(configuration: RecordingConfiguration) async throws {
-        let content = try await SCShareableContent.current
-
-        guard let scWindow = content.windows.first(where: {
-            $0.windowID == configuration.window.id
-        }) else {
-            throw RecordingError.windowNotFound
-        }
-
-        let filter = SCContentFilter(desktopIndependentWindow: scWindow)
+    private func setupStream(configuration: RecordingConfiguration, filter: SCContentFilter) async throws {
+        // Scale factor already stored in startRecording()
 
         let streamConfig = SCStreamConfiguration()
-        streamConfig.width = Int(configuration.window.bounds.width)
-        streamConfig.height = Int(configuration.window.bounds.height)
+
+        // CRITICAL: Use filter's pointPixelScale for TRUE native resolution capture
+        // This is the authoritative scale factor from ScreenCaptureKit itself
+        // pointPixelScale accounts for Retina displays (typically 2.0) and the actual content scale
+        // contentRect gives us the logical dimensions, multiply by pointPixelScale for physical pixels
+        streamConfig.width = Int(filter.contentRect.width * CGFloat(filter.pointPixelScale))
+        streamConfig.height = Int(filter.contentRect.height * CGFloat(filter.pointPixelScale))
+
         streamConfig.pixelFormat = kCVPixelFormatType_32BGRA
         streamConfig.showsCursor = true
         streamConfig.captureResolution = .best
+        streamConfig.scalesToFit = false  // Don't scale down - capture at full resolution
         streamConfig.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(configuration.frameRate))
 
         let stream = SCStream(filter: filter, configuration: streamConfig, delegate: nil)
@@ -243,6 +283,13 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
             let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             adaptor.append(composedBuffer, withPresentationTime: presentationTime)
             frameCount += 1
+
+            // Debug: Log first frame dimensions
+            if frameCount == 1 {
+                let bufWidth = CVPixelBufferGetWidth(composedBuffer)
+                let bufHeight = CVPixelBufferGetHeight(composedBuffer)
+                print("  - First frame composed: \(bufWidth)×\(bufHeight) px")
+            }
         }
     }
 
@@ -255,10 +302,12 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         let windowWidth = CVPixelBufferGetWidth(windowBuffer)
         let windowHeight = CVPixelBufferGetHeight(windowBuffer)
 
-        // Add margins to show background (same as preview - 80px margin)
-        let margin: CGFloat = 160  // 80px on each side = 160 total
-        let outputWidth = windowWidth + Int(margin)
-        let outputHeight = windowHeight + Int(margin)
+        // Add margins to show background (same as preview - 80px margin in points)
+        // Use the exact scale factor from SCContentFilter for pixel-perfect composition
+        let marginInPoints: CGFloat = 80  // 80pt on each side
+        let marginInPixels = Int(marginInPoints * 2 * captureScaleFactor)  // *2 for both sides
+        let outputWidth = windowWidth + marginInPixels
+        let outputHeight = windowHeight + marginInPixels
 
         // Create output pixel buffer with margins
         var outputBuffer: CVPixelBuffer?
@@ -288,8 +337,8 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
 
         // Window image centered on canvas
         let windowImage = CIImage(cvPixelBuffer: windowBuffer)
-        let xOffset = margin / 2
-        let yOffset = margin / 2
+        let xOffset = CGFloat(marginInPixels) / 2
+        let yOffset = CGFloat(marginInPixels) / 2
         let centeredWindow = windowImage.transformed(
             by: CGAffineTransform(translationX: xOffset, y: yOffset)
         )
@@ -372,8 +421,9 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         configuration: WebcamConfiguration,
         canvasSize: CGSize
     ) -> CIImage {
-        let size = configuration.size
-        let padding: CGFloat = 40
+        // Scale webcam size and padding to match the native resolution canvas
+        let size = configuration.size * captureScaleFactor
+        let padding: CGFloat = 40 * captureScaleFactor
 
         // Scale webcam to fill the target size (aspect fill)
         let targetSize = CGSize(width: size, height: size)

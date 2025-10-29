@@ -10,6 +10,7 @@ import SwiftUI
 import ScreenCaptureKit
 import Combine
 import CoreMedia
+import AppKit
 
 /// Service for rendering window previews with backgrounds
 @MainActor
@@ -39,13 +40,15 @@ class WindowPreview: NSObject, ObservableObject, SCStreamOutput {
             // Create filter for this specific window
             let filter = SCContentFilter(desktopIndependentWindow: scWindow)
 
-            // Configure stream for single frame capture
+            // Configure stream for single frame capture at native resolution
+            // Use filter's pointPixelScale for accurate native resolution
             let config = SCStreamConfiguration()
-            config.width = Int(window.bounds.width)
-            config.height = Int(window.bounds.height)
+            config.width = Int(filter.contentRect.width * CGFloat(filter.pointPixelScale))
+            config.height = Int(filter.contentRect.height * CGFloat(filter.pointPixelScale))
             config.pixelFormat = kCVPixelFormatType_32BGRA
             config.showsCursor = false
             config.captureResolution = .best
+            config.scalesToFit = false
             config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
 
             // Create stream

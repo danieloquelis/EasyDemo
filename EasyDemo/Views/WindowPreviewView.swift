@@ -38,22 +38,41 @@ struct WindowPreviewView: View {
                             x: 0,
                             y: 10
                         )
+                        .overlay(alignment: .topLeading) {
+                            // Webcam overlay
+                            if let config = webcamConfig, config.isEnabled {
+                                if webcam.isCapturing, let webcamFrame = webcam.currentFrame {
+                                    let webcamPosition = calculateWebcamPosition(
+                                        config: config,
+                                        containerSize: geometry.size
+                                    )
 
-                    // Webcam overlay
-                    if let config = webcamConfig, config.isEnabled, let webcamFrame = webcam.currentFrame {
-                        let webcamPosition = calculateWebcamPosition(
-                            config: config,
-                            containerSize: geometry.size
-                        )
+                                    WebcamOverlayView(
+                                        frame: webcamFrame,
+                                        shape: config.shape,
+                                        size: config.size * 0.5,  // Scale down for preview
+                                        borderWidth: config.borderWidth
+                                    )
+                                    .offset(x: webcamPosition.x, y: webcamPosition.y)
+                                } else {
+                                    // Show placeholder when webcam is enabled but not yet capturing
+                                    let webcamPosition = calculateWebcamPosition(
+                                        config: config,
+                                        containerSize: geometry.size
+                                    )
 
-                        WebcamOverlayView(
-                            frame: webcamFrame,
-                            shape: config.shape,
-                            size: config.size * 0.5,  // Scale down for preview
-                            borderWidth: config.borderWidth
-                        )
-                        .position(webcamPosition)
-                    }
+                                    Circle()
+                                        .fill(Color.gray.opacity(0.3))
+                                        .frame(width: config.size * 0.5, height: config.size * 0.5)
+                                        .overlay(
+                                            ProgressView()
+                                                .progressViewStyle(.circular)
+                                                .scaleEffect(0.6)
+                                        )
+                                        .offset(x: webcamPosition.x, y: webcamPosition.y)
+                                }
+                            }
+                        }
                 } else {
                     VStack(spacing: 16) {
                         ProgressView()
@@ -98,22 +117,23 @@ struct WindowPreviewView: View {
         )
     }
 
-    /// Calculate webcam overlay position based on configuration
+    /// Calculate webcam overlay offset based on configuration
+    /// Returns offset from top-leading corner for use with .offset()
     private func calculateWebcamPosition(config: WebcamConfiguration, containerSize: CGSize) -> CGPoint {
         let padding: CGFloat = 40
         let size = config.size * 0.5  // Match the scaled size
 
         switch config.position {
         case .topLeft:
-            return CGPoint(x: padding + size / 2, y: padding + size / 2)
+            return CGPoint(x: padding, y: padding)
         case .topRight:
-            return CGPoint(x: containerSize.width - padding - size / 2, y: padding + size / 2)
+            return CGPoint(x: containerSize.width - padding - size, y: padding)
         case .bottomLeft:
-            return CGPoint(x: padding + size / 2, y: containerSize.height - padding - size / 2)
+            return CGPoint(x: padding, y: containerSize.height - padding - size)
         case .bottomRight:
-            return CGPoint(x: containerSize.width - padding - size / 2, y: containerSize.height - padding - size / 2)
+            return CGPoint(x: containerSize.width - padding - size, y: containerSize.height - padding - size)
         case .custom:
-            return CGPoint(x: containerSize.width / 2, y: containerSize.height / 2)
+            return CGPoint(x: (containerSize.width - size) / 2, y: (containerSize.height - size) / 2)
         }
     }
 

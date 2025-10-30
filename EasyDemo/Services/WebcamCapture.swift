@@ -67,6 +67,34 @@ class WebcamCapture: NSObject, ObservableObject {
             throw WebcamError.noCameraAvailable
         }
 
+        // Configure device for high quality
+        try device.lockForConfiguration()
+
+        // Set to highest quality format available
+        if let format = device.formats.first(where: { format in
+            let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            return dimensions.width == 1920 && dimensions.height == 1080
+        }) {
+            device.activeFormat = format
+        }
+
+        // Enable smooth autofocus if available
+        if device.isFocusModeSupported(.continuousAutoFocus) {
+            device.focusMode = .continuousAutoFocus
+        }
+
+        // Enable smooth exposure if available
+        if device.isExposureModeSupported(.continuousAutoExposure) {
+            device.exposureMode = .continuousAutoExposure
+        }
+
+        // Enable auto white balance
+        if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+            device.whiteBalanceMode = .continuousAutoWhiteBalance
+        }
+
+        device.unlockForConfiguration()
+
         // Add input
         let input = try AVCaptureDeviceInput(device: device)
         if session.canAddInput(input) {
@@ -78,12 +106,29 @@ class WebcamCapture: NSObject, ObservableObject {
         // Add output
         let output = AVCaptureVideoDataOutput()
         output.setSampleBufferDelegate(self, queue: captureQueue)
+
+        // Configure for high quality capture
         output.videoSettings = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferWidthKey as String: 1920,
+            kCVPixelBufferHeightKey as String: 1080
         ]
+
+        // Ensure we don't drop frames for better quality
+        output.alwaysDiscardsLateVideoFrames = false
 
         if session.canAddOutput(output) {
             session.addOutput(output)
+
+            // Configure connection for best quality
+            if let connection = output.connection(with: .video) {
+                if connection.isVideoMirroringSupported {
+                    connection.isVideoMirrored = true  // Mirror front camera
+                }
+                if connection.isVideoOrientationSupported {
+                    connection.videoOrientation = .portrait
+                }
+            }
         } else {
             throw WebcamError.cannotAddOutput
         }

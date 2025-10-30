@@ -500,34 +500,53 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         let size = configuration.size * captureScaleFactor
         let padding: CGFloat = 40 * captureScaleFactor
 
+        // Debug: Log webcam frame extent on first few frames
+        if frameCount <= 3 {
+            print("🎥 Frame \(frameCount): Webcam overlay")
+            print("  - Webcam frame extent: \(webcamFrame.extent)")
+            print("  - Canvas size: \(canvasSize)")
+            print("  - Target webcam size: \(size)px")
+            print("  - Configuration position: \(configuration.position.rawValue)")
+        }
+
         // Scale webcam to fill the target size (aspect fill)
         let targetSize = CGSize(width: size, height: size)
         let webcamAspect = webcamFrame.extent.width / webcamFrame.extent.height
         let targetAspect = targetSize.width / targetSize.height
 
         var scale: CGFloat
-        var offsetX: CGFloat = 0
-        var offsetY: CGFloat = 0
+        var cropRect: CGRect
 
         if webcamAspect > targetAspect {
             // Webcam is wider - fit height, crop width
             scale = targetSize.height / webcamFrame.extent.height
-            offsetX = (webcamFrame.extent.width * scale - targetSize.width) / 2
+            let scaledWidth = webcamFrame.extent.width * scale
+            let offsetX = (scaledWidth - targetSize.width) / 2
+            cropRect = CGRect(
+                x: offsetX,
+                y: 0,
+                width: targetSize.width,
+                height: targetSize.height
+            )
         } else {
             // Webcam is taller - fit width, crop height
             scale = targetSize.width / webcamFrame.extent.width
-            offsetY = (webcamFrame.extent.height * scale - targetSize.height) / 2
-        }
-
-        // Scale and center crop
-        let scaledWebcam = webcamFrame
-            .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-            .cropped(to: CGRect(
-                x: offsetX,
+            let scaledHeight = webcamFrame.extent.height * scale
+            let offsetY = (scaledHeight - targetSize.height) / 2
+            cropRect = CGRect(
+                x: 0,
                 y: offsetY,
                 width: targetSize.width,
                 height: targetSize.height
-            ))
+            )
+        }
+
+        // Scale and center crop the webcam feed
+        let scaledWebcam = webcamFrame
+            .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            .cropped(to: cropRect)
+            // Move the cropped region to origin (0,0)
+            .transformed(by: CGAffineTransform(translationX: -cropRect.origin.x, y: -cropRect.origin.y))
 
         // Calculate position on canvas
         let position = configuration.position.offset(
@@ -541,46 +560,67 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
 
         switch configuration.shape {
         case .circle:
-            // Create circular mask with proper dimensions
+            // Use CICrop + CICircleSplashDistortion for simpler circular clipping
+            // This is similar to how Loom/Screen Studio do it
             let maskRect = CGRect(origin: .zero, size: targetSize)
+            let radius = min(targetSize.width, targetSize.height) / 2
 
-            if let radialFilter = CIFilter(name: "CIRadialGradient") {
-                radialFilter.setValue(CIVector(x: targetSize.width/2, y: targetSize.height/2), forKey: "inputCenter")
-                radialFilter.setValue(targetSize.width/2 - 1, forKey: "inputRadius0")  // Slightly smaller to avoid edge artifacts
-                radialFilter.setValue(targetSize.width/2, forKey: "inputRadius1")
-                radialFilter.setValue(CIColor.white, forKey: "inputColor0")
-                radialFilter.setValue(CIColor.clear, forKey: "inputColor1")
+            // Use Core Image's built-in circular cropping via alpha channel
+            // Create a circular alpha mask
+            let centerX = targetSize.width / 2
+            let centerY = targetSize.height / 2
 
-                if let maskImage = radialFilter.outputImage?.cropped(to: maskRect) {
-                    maskedWebcam = scaledWebcam.applyingFilter("CIBlendWithMask", parameters: [
-                        kCIInputMaskImageKey: maskImage
+            // Use CIRadialGradient to create a simple circular mask
+            let maskGradient = CIFilter(name: "CIRadialGradient", parameters: [
+                "inputCenter": CIVector(x: centerX, y: centerY),
+                "inputRadius0": radius - 1,
+                "inputRadius1": radius,
+                "inputColor0": CIColor.white,
+                "inputColor1": CIColor.clear
+            ])?.outputImage?.cropped(to: maskRect)
+
+            if let mask = maskGradient {
+                // Create the masked webcam by blending
+                maskedWebcam = scaledWebcam
+                    .cropped(to: maskRect)
+                    .applyingFilter("CIBlendWithAlphaMask", parameters: [
+                        "inputMaskImage": mask
                     ])
-                }
             }
 
-            // Add border if specified
+            // Add border if specified (simple approach - draw a circle stroke)
             if configuration.borderWidth > 0 {
-                if let borderFilter = CIFilter(name: "CIConstantColorGenerator") {
-                    borderFilter.setValue(CIColor.white, forKey: kCIInputColorKey)
-                    if let borderColor = borderFilter.outputImage {
-                        // Create ring mask for border
-                        if let borderMask = CIFilter(name: "CIRadialGradient") {
-                            let innerRadius = targetSize.width/2 - configuration.borderWidth - 1
-                            let outerRadius = targetSize.width/2 - 1
-                            borderMask.setValue(CIVector(x: targetSize.width/2, y: targetSize.height/2), forKey: "inputCenter")
-                            borderMask.setValue(innerRadius, forKey: "inputRadius0")
-                            borderMask.setValue(outerRadius, forKey: "inputRadius1")
-                            borderMask.setValue(CIColor.clear, forKey: "inputColor0")
-                            borderMask.setValue(CIColor.white, forKey: "inputColor1")
+                let scaledBorderWidth = configuration.borderWidth * captureScaleFactor
+                let borderRadius = radius - scaledBorderWidth / 2
 
-                            if let borderMaskImage = borderMask.outputImage?.cropped(to: maskRect) {
-                                let borderedColor = borderColor.applyingFilter("CIBlendWithMask", parameters: [
-                                    kCIInputMaskImageKey: borderMaskImage
-                                ])
-                                maskedWebcam = borderedColor.composited(over: maskedWebcam)
-                            }
-                        }
-                    }
+                // Create border using two radial gradients
+                let outerBorder = CIFilter(name: "CIRadialGradient", parameters: [
+                    "inputCenter": CIVector(x: centerX, y: centerY),
+                    "inputRadius0": borderRadius - scaledBorderWidth / 2,
+                    "inputRadius1": borderRadius + scaledBorderWidth / 2,
+                    "inputColor0": CIColor.clear,
+                    "inputColor1": CIColor.white
+                ])?.outputImage?.cropped(to: maskRect)
+
+                let innerCutout = CIFilter(name: "CIRadialGradient", parameters: [
+                    "inputCenter": CIVector(x: centerX, y: centerY),
+                    "inputRadius0": borderRadius - scaledBorderWidth / 2 - 1,
+                    "inputRadius1": borderRadius - scaledBorderWidth / 2,
+                    "inputColor0": CIColor.white,
+                    "inputColor1": CIColor.clear
+                ])?.outputImage?.cropped(to: maskRect)
+
+                if let outer = outerBorder, let inner = innerCutout {
+                    let borderMask = outer.applyingFilter("CISourceInCompositing", parameters: [
+                        "inputBackgroundImage": inner
+                    ])
+
+                    let borderColor = CIImage(color: CIColor.white).cropped(to: maskRect)
+                    let border = borderColor.applyingFilter("CIBlendWithAlphaMask", parameters: [
+                        "inputMaskImage": borderMask
+                    ])
+
+                    maskedWebcam = border.composited(over: maskedWebcam)
                 }
             }
 
@@ -590,8 +630,17 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         }
 
         // Position the webcam overlay on canvas
+        // IMPORTANT: Core Image uses bottom-left origin, so we need to flip Y
+        // Convert from top-left (SwiftUI/UIKit) to bottom-left (Core Image)
+        let flippedY = canvasSize.height - position.y - size
+
+        if frameCount <= 3 {
+            print("  - Position (top-left coords): \(position)")
+            print("  - Position (Core Image coords): x=\(position.x), y=\(flippedY)")
+        }
+
         let positioned = maskedWebcam.transformed(
-            by: CGAffineTransform(translationX: position.x, y: position.y)
+            by: CGAffineTransform(translationX: position.x, y: flippedY)
         )
 
         return positioned

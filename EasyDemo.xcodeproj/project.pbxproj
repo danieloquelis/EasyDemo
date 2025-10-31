@@ -404,10 +404,11 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = EasyDemo/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = EasyDemo;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				INFOPLIST_KEY_NSCameraUsageDescription = "EasyDemo requires access to your camera for the webcam recording feature.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "EasyDemo needs access to your camera to add webcam overlay to your recordings.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "EasyDemo requires access to your microphone for the voice recording feature.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "EasyDemo needs access to your microphone to record audio with your screen recordings.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -445,10 +446,11 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = EasyDemo/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = EasyDemo;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				INFOPLIST_KEY_NSCameraUsageDescription = "EasyDemo requires access to your camera for the webcam recording feature.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "EasyDemo needs access to your camera to add webcam overlay to your recordings.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "EasyDemo requires access to your microphone for the voice recording feature.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "EasyDemo needs access to your microphone to record audio with your screen recordings.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

@@ -1,0 +1,105 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Source code
+*.swift text diff=swift
+*.h text diff=objc
+*.m text diff=objc
+*.mm text diff=objc
+*.c text diff=c
+*.cpp text diff=cpp
+*.metal text
+
+# Xcode project files
+*.pbxproj text -crlf merge=union
+*.xcworkspacedata text
+*.xcscheme text
+*.xcconfig text
+*.entitlements text
+*.plist text
+
+# Documentation
+*.md text diff=markdown
+*.markdown text diff=markdown
+*.txt text
+LICENSE text
+README text
+
+# Scripts
+*.sh text eol=lf
+*.bash text eol=lf
+*.zsh text eol=lf
+
+# JSON, YAML, XML
+*.json text
+*.yaml text
+*.yml text
+*.xml text
+
+# Images
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.svg text
+*.pdf binary
+
+# Video/Audio (for demo/test assets)
+*.mov binary
+*.mp4 binary
+*.m4v binary
+*.avi binary
+*.mp3 binary
+*.wav binary
+*.aac binary
+
+# Archives
+*.zip binary
+*.tar binary
+*.gz binary
+*.bz2 binary
+*.7z binary
+*.dmg binary
+
+# Fonts
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+
+# Xcode specific binaries
+*.xcassets/** binary
+*.xcodeproj/** binary
+*.framework/** binary
+*.xcframework/** binary
+*.app/** binary
+
+# Git
+.gitattributes text
+.gitignore text
+.gitkeep text
+
+# CI/CD
+.github/** text
+
+# Swift Package Manager
+Package.swift text
+Package.resolved text
+
+# CocoaPods (if used)
+Podfile text
+Podfile.lock text -diff
+
+# Carthage (if used)
+Cartfile text
+Cartfile.resolved text
+
+# Linguist overrides for statistics
+*.pbxproj linguist-generated=true
+*.xcworkspacedata linguist-generated=true
+*.xcscheme linguist-generated=true
+Pods/** linguist-vendored
+Carthage/** linguist-vendored
+*.framework/** linguist-vendored

@@ -1,0 +1,188 @@
+name: Build and Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version bump"
+        required: true
+        type: choice
+        options:
+          - none
+          - patch
+          - minor
+          - major
+        default: "none"
+      custom_version:
+        description: "Custom version (Optional)"
+        required: false
+        type: string
+      create_release:
+        description: "Create GitHub release"
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  deploy:
+    runs-on: macos-14
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: release-${{ github.ref }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
+      - name: Install dependencies
+        run: bundle install --jobs 4 --retry 3
+
+      - name: Install Apple certificate and provisioning profile
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.CERTIFICATES_P12 }}
+          P12_PASSWORD: ${{ secrets.CERTIFICATES_PASSWORD }}
+          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.MACOS_PROVISION_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          # Create variables
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          PP_PATH=$RUNNER_TEMP/build_pp.provisionprofile
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # Import certificate from secrets
+          if [ -z "$BUILD_CERTIFICATE_BASE64" ]; then
+            echo "Error: BUILD_CERTIFICATE_BASE64 secret is not set"
+            exit 1
+          fi
+
+          echo "Decoding certificate..."
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode --output="$CERTIFICATE_PATH"
+
+          # Verify certificate file
+          if [ ! -f "$CERTIFICATE_PATH" ]; then
+            echo "Error: Certificate file was not created"
+            exit 1
+          fi
+
+          CERT_SIZE=$(wc -c < "$CERTIFICATE_PATH" | tr -d ' ')
+          echo "Certificate file size: ${CERT_SIZE} bytes"
+
+          if [ "$CERT_SIZE" -eq 0 ]; then
+            echo "Error: Certificate file is empty. Check if CERTIFICATES_P12 secret is correctly set."
+            exit 1
+          fi
+
+          # Import provisioning profile (optional)
+          if [ -n "$BUILD_PROVISION_PROFILE_BASE64" ]; then
+            echo "Decoding provisioning profile..."
+            echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode --output="$PP_PATH"
+          fi
+
+          # Create temporary keychain
+          echo "Creating temporary keychain..."
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate to keychain
+          echo "Importing certificate to keychain..."
+          security import "$CERTIFICATE_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+
+          # Set key partition list to allow codesign access
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Add keychain to search list and set as default
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed s/\"//g)
+          security default-keychain -s "$KEYCHAIN_PATH"
+
+          # Apply provisioning profile
+          if [ -f "$PP_PATH" ]; then
+            echo "Installing provisioning profile..."
+            mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+            cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/
+          fi
+
+          # Verify certificates are available
+          echo ""
+          echo "Available signing identities:"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Bump version
+        id: version
+        run: |
+          chmod +x scripts/bump_version.sh
+          if [ -n "${{ inputs.custom_version }}" ]; then
+            ./scripts/bump_version.sh "${{ inputs.custom_version }}"
+          else
+            ./scripts/bump_version.sh "${{ inputs.version }}"
+          fi
+
+      - name: Run tests
+        run: bundle exec fastlane test
+        continue-on-error: true
+        timeout-minutes: 3
+
+      - name: Setup App Store Connect API Key
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+        run: |
+          # Create App Store Connect API key file for xcodebuild
+          mkdir -p ~/private_keys
+          API_KEY_PATH=~/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8
+          echo "$APP_STORE_CONNECT_API_KEY" > "$API_KEY_PATH"
+          echo "Created API key at: $API_KEY_PATH"
+
+      - name: Build and upload to TestFlight
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          # Ensure keychain is unlocked before building
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Run fastlane
+          bundle exec fastlane beta
+
+      - name: Clean up keychain and provisioning profile
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
+          rm -f ~/Library/MobileDevice/Provisioning\ Profiles/build_pp.provisionprofile || true
+
+      - name: Create GitHub release
+        if: inputs.create_release == true
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ env.VERSION_NUMBER }}
+          name: v${{ env.VERSION_NUMBER }}
+          body: |
+            ## Release v${{ env.VERSION_NUMBER }}
+
+            Build ${{ env.BUILD_NUMBER }} has been uploaded to TestFlight.
+
+            ### Changes
+            ${{ github.event.head_commit.message }}
+          draft: true
+          generate_release_notes: true

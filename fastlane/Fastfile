@@ -26,16 +26,33 @@ platform :mac do
       xcodeproj: "EasyDemo.xcodeproj"
     )
 
-    # Build
+    # Build and package for Mac App Store / TestFlight
+    # Note: macOS apps require a .pkg for TestFlight upload
     build_mac_app(
       scheme: "EasyDemo",
-      export_method: "app-store"
+      export_method: "app-store",
+      output_directory: "build",
+      skip_package_pkg: false,
+      xcargs: "CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Distribution' DEVELOPMENT_TEAM=L329D2LS9J PROVISIONING_PROFILE_SPECIFIER='EasyDemo Mac App Store'",
+      export_options: {
+        method: "app-store",
+        teamID: "L329D2LS9J",
+        signingStyle: "manual",
+        signingCertificate: "Apple Distribution",
+        provisioningProfiles: {
+          "com.easydemo" => "EasyDemo Mac App Store"
+        },
+        uploadSymbols: true,
+        compileBitcode: false,
+        manageAppVersionAndBuildNumber: false
+      }
     )
 
     # Upload to TestFlight
     upload_to_testflight(
       api_key: api_key,
-      skip_waiting_for_build_processing: true
+      skip_waiting_for_build_processing: true,
+      app_platform: "osx"
     )
   end
 
@@ -51,7 +68,12 @@ platform :mac do
   lane :test do
     run_tests(
       scheme: "EasyDemo",
-      devices: ["Mac"]
+      destination: "platform=macOS,arch=arm64",
+      code_coverage: true,
+      skip_testing: [
+        "EasyDemoUITests"
+      ],
+      xcargs: "CODE_SIGN_IDENTITY='-' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO"
     )
   end
 

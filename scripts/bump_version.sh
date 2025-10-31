@@ -7,7 +7,7 @@ INPUT="${1:-patch}"
 get_latest_version() {
     LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
     if [ -z "$LATEST" ]; then
-        echo "0.0.0"
+        echo "1.0.0"  # Default to 1.0.0 for first release
     else
         echo "${LATEST#v}"  # Remove 'v' prefix
     fi

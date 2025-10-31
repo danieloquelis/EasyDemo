@@ -1,0 +1,4 @@
+# Appfile for EasyDemo
+
+app_identifier("com.easydemo.app") # TODO: Update with your bundle ID
+apple_id(ENV["APPLE_ID"])

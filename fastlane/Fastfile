@@ -1,0 +1,66 @@
+# Fastfile for EasyDemo
+
+default_platform(:mac)
+
+platform :mac do
+  desc "Deploy to TestFlight"
+  lane :beta do
+    # Setup App Store Connect API if available
+    if ENV["APP_STORE_CONNECT_API_KEY"]
+      app_store_connect_api_key(
+        key_id: ENV["APP_STORE_CONNECT_API_KEY_ID"],
+        issuer_id: ENV["APP_STORE_CONNECT_API_ISSUER_ID"],
+        key_content: ENV["APP_STORE_CONNECT_API_KEY"]
+      )
+    end
+
+    # Update version and build
+    version = ENV["VERSION_NUMBER"]
+    build = ENV["BUILD_NUMBER"] || Time.now.to_i.to_s
+
+    increment_version_number(
+      version_number: version,
+      xcodeproj: "EasyDemo.xcodeproj"
+    ) if version
+
+    increment_build_number(
+      build_number: build,
+      xcodeproj: "EasyDemo.xcodeproj"
+    )
+
+    # Build and upload
+    build_mac_app(
+      scheme: "EasyDemo",
+      export_method: "app-store",
+      xcargs: "-allowProvisioningUpdates"
+    )
+
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true
+    )
+  end
+
+  desc "Build locally"
+  lane :build do
+    build_mac_app(
+      scheme: "EasyDemo",
+      skip_package_pkg: true
+    )
+  end
+
+  desc "Run tests"
+  lane :test do
+    run_tests(
+      scheme: "EasyDemo",
+      devices: ["Mac"]
+    )
+  end
+
+  desc "Lint code"
+  lane :lint do
+    swiftlint(
+      mode: :lint,
+      raise_if_swiftlint_error: false
+    )
+  end
+end

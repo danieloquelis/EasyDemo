@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version bump"
+        required: true
+        type: choice
+        options:
+          - none
+          - patch
+          - minor
+          - major
+        default: "patch"
+      custom_version:
+        description: "Custom version (Optional)"
+        required: false
+        type: string
+
+jobs:
+  deploy:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install dependencies
+        run: |
+          brew install swiftlint swiftformat
+          gem install fastlane
+
+      - name: Bump version
+        id: version
+        run: |
+          chmod +x scripts/bump_version.sh
+          if [ -n "${{ github.event.inputs.custom_version }}" ]; then
+            ./scripts/bump_version.sh "${{ github.event.inputs.custom_version }}"
+          else
+            ./scripts/bump_version.sh "${{ github.event.inputs.version }}"
+          fi
+
+      - name: Run tests
+        run: fastlane test
+        continue-on-error: true
+
+      - name: Build and upload to TestFlight
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+        run: fastlane beta
+
+      - name: Create release
+        if: github.event.inputs.version != 'none'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ env.VERSION_NUMBER }}
+          name: v${{ env.VERSION_NUMBER }}
+          body: |
+            Build ${{ env.BUILD_NUMBER }} uploaded to TestFlight.
+
+            ${{ github.event.head_commit.message }}
+          draft: true
+          generate_release_notes: true

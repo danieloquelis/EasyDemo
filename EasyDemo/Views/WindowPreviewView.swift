@@ -50,8 +50,7 @@ struct WindowPreviewView: View {
                                     WebcamOverlayView(
                                         frame: webcamFrame,
                                         shape: config.shape,
-                                        size: config.size * 0.5,  // Scale down for preview
-                                        borderWidth: config.borderWidth
+                                        size: config.size * 0.5  // Scale down for preview
                                     )
                                     .offset(x: webcamPosition.x, y: webcamPosition.y)
                                 } else {
@@ -181,7 +180,6 @@ struct WebcamOverlayView: View {
     let frame: CIImage
     let shape: WebcamConfiguration.Shape
     let size: CGFloat
-    let borderWidth: CGFloat
 
     // Reuse CIContext for performance
     private static let ciContext = CIContext(options: [
@@ -198,7 +196,7 @@ struct WebcamOverlayView: View {
                     .aspectRatio(contentMode: .fill)
                     .frame(width: size, height: size)
                     .clipShape(Circle())
-                    .overlay(Circle().stroke(Color.white, lineWidth: borderWidth))
+                    .shadow(color: .black.opacity(0.7), radius: 15, x: 0, y: 8)
 
             case .roundedRectangle:
                 Image(decorative: cgImage, scale: 1.0)
@@ -206,18 +204,15 @@ struct WebcamOverlayView: View {
                     .aspectRatio(contentMode: .fill)
                     .frame(width: size, height: size)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white, lineWidth: borderWidth))
+                    .shadow(color: .black.opacity(0.7), radius: 15, x: 0, y: 8)
 
             case .squircle:
                 Image(decorative: cgImage, scale: 1.0)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .frame(width: size, height: size)
-                    .clipShape(RoundedRectangle(cornerRadius: size / 4, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: size / 4, style: .continuous)
-                            .stroke(Color.white, lineWidth: borderWidth)
-                    )
+                    .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+                    .shadow(color: .black.opacity(0.7), radius: 15, x: 0, y: 8)
             }
         }
     }

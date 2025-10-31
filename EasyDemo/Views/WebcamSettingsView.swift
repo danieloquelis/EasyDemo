@@ -61,7 +61,7 @@ struct WebcamSettingsView: View {
                             Text(shape.rawValue).tag(shape)
                         }
                     }
-                    .pickerStyle(.segmented)
+                    .pickerStyle(.menu)
                 }
 
                 // Position selection
@@ -87,20 +87,32 @@ struct WebcamSettingsView: View {
                     Slider(value: $configuration.size, in: 100...400, step: 10)
                 }
 
-                // Border width
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Border Width: \(Int(configuration.borderWidth))px")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                // Webcam preview
+                if webcam.isCapturing, let currentFrame = webcam.currentFrame {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Preview")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
 
-                    Slider(value: $configuration.borderWidth, in: 0...10, step: 1)
+                        WebcamOverlayView(
+                            frame: currentFrame,
+                            shape: configuration.shape,
+                            size: 120
+                        )
+                        .frame(height: 140)
+                    }
+                } else if configuration.isEnabled {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Preview")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .scaleEffect(1.2)
+                            .frame(height: 140)
+                    }
                 }
-
-                // Note about preview
-                Text("Preview will appear in the main preview area →")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .italic()
             }
         }
         .onDisappear {
@@ -109,12 +121,11 @@ struct WebcamSettingsView: View {
     }
 }
 
-/// Preview shape for webcam
+/// Preview shape for webcam (unused - kept for compatibility)
 struct WebcamPreviewShape: View {
     let frame: CIImage
     let shape: WebcamConfiguration.Shape
     let size: CGFloat
-    let borderWidth: CGFloat
 
     var body: some View {
         GeometryReader { geometry in
@@ -127,7 +138,7 @@ struct WebcamPreviewShape: View {
                         .aspectRatio(contentMode: .fill)
                         .frame(width: size, height: size)
                         .clipShape(Circle())
-                        .overlay(Circle().stroke(Color.white, lineWidth: borderWidth))
+                        .shadow(color: .black.opacity(0.7), radius: 15, x: 0, y: 8)
                         .frame(maxWidth: .infinity)
 
                 case .roundedRectangle:
@@ -136,7 +147,7 @@ struct WebcamPreviewShape: View {
                         .aspectRatio(contentMode: .fill)
                         .frame(width: size, height: size)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white, lineWidth: borderWidth))
+                        .shadow(color: .black.opacity(0.7), radius: 15, x: 0, y: 8)
                         .frame(maxWidth: .infinity)
 
                 case .squircle:
@@ -144,11 +155,8 @@ struct WebcamPreviewShape: View {
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                         .frame(width: size, height: size)
-                        .clipShape(RoundedRectangle(cornerRadius: size / 4, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: size / 4, style: .continuous)
-                                .stroke(Color.white, lineWidth: borderWidth)
-                        )
+                        .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+                        .shadow(color: .black.opacity(0.7), radius: 15, x: 0, y: 8)
                         .frame(maxWidth: .infinity)
                 }
             }

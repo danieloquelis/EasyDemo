@@ -581,52 +581,128 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
 
             if let mask = maskGradient {
                 // Create the masked webcam by blending
-                maskedWebcam = scaledWebcam
+                let maskedImage = scaledWebcam
                     .cropped(to: maskRect)
                     .applyingFilter("CIBlendWithAlphaMask", parameters: [
                         "inputMaskImage": mask
                     ])
+
+                // Add shadow to webcam (like Loom/Screen Studio)
+                // Create shadow using CIGaussianBlur + offset
+                let shadowRadius = 30.0 * captureScaleFactor  // Stronger shadow radius
+                let shadowOffset = CGSize(width: 0, height: -15 * captureScaleFactor)  // More offset
+                let shadowOpacity: CGFloat = 0.7  // Darker shadow (70% opacity)
+
+                // Create a black version of the mask for the shadow
+                let shadowMask = CIImage(color: CIColor.black).cropped(to: maskRect)
+                    .applyingFilter("CIBlendWithAlphaMask", parameters: [
+                        "inputMaskImage": mask
+                    ])
+
+                // Apply blur to create soft shadow
+                let shadow = shadowMask
+                    .applyingFilter("CIGaussianBlur", parameters: [
+                        "inputRadius": shadowRadius
+                    ])
+                    .transformed(by: CGAffineTransform(translationX: shadowOffset.width, y: shadowOffset.height))
+                    .applyingFilter("CIColorMatrix", parameters: [
+                        "inputAVector": CIVector(x: 0, y: 0, z: 0, w: shadowOpacity)
+                    ])
+
+                // Composite: webcam over shadow
+                maskedWebcam = maskedImage.composited(over: shadow)
             }
 
-            // Add border if specified (simple approach - draw a circle stroke)
-            if configuration.borderWidth > 0 {
-                let scaledBorderWidth = configuration.borderWidth * captureScaleFactor
-                let borderRadius = radius - scaledBorderWidth / 2
+        case .roundedRectangle:
+            // Create rounded rectangle mask using Core Graphics
+            let maskRect = CGRect(origin: .zero, size: targetSize)
+            let cornerRadius: CGFloat = 16 * captureScaleFactor
 
-                // Create border using two radial gradients
-                let outerBorder = CIFilter(name: "CIRadialGradient", parameters: [
-                    "inputCenter": CIVector(x: centerX, y: centerY),
-                    "inputRadius0": borderRadius - scaledBorderWidth / 2,
-                    "inputRadius1": borderRadius + scaledBorderWidth / 2,
-                    "inputColor0": CIColor.clear,
-                    "inputColor1": CIColor.white
-                ])?.outputImage?.cropped(to: maskRect)
+            if frameCount <= 3 {
+                print("  - Creating rounded rectangle mask: size=\(targetSize), radius=\(cornerRadius)")
+            }
 
-                let innerCutout = CIFilter(name: "CIRadialGradient", parameters: [
-                    "inputCenter": CIVector(x: centerX, y: centerY),
-                    "inputRadius0": borderRadius - scaledBorderWidth / 2 - 1,
-                    "inputRadius1": borderRadius - scaledBorderWidth / 2,
-                    "inputColor0": CIColor.white,
-                    "inputColor1": CIColor.clear
-                ])?.outputImage?.cropped(to: maskRect)
-
-                if let outer = outerBorder, let inner = innerCutout {
-                    let borderMask = outer.applyingFilter("CISourceInCompositing", parameters: [
-                        "inputBackgroundImage": inner
-                    ])
-
-                    let borderColor = CIImage(color: CIColor.white).cropped(to: maskRect)
-                    let border = borderColor.applyingFilter("CIBlendWithAlphaMask", parameters: [
-                        "inputMaskImage": borderMask
-                    ])
-
-                    maskedWebcam = border.composited(over: maskedWebcam)
+            // Create mask using Core Graphics path
+            if let mask = createRoundedRectangleMask(size: targetSize, cornerRadius: cornerRadius) {
+                if frameCount <= 3 {
+                    print("  - Rounded rectangle mask created: extent=\(mask.extent)")
                 }
+
+                // Ensure webcam is cropped and positioned at origin
+                let croppedWebcam = scaledWebcam.cropped(to: maskRect)
+                let webcamAtOrigin = croppedWebcam.transformed(
+                    by: CGAffineTransform(translationX: -croppedWebcam.extent.origin.x, y: -croppedWebcam.extent.origin.y)
+                )
+
+                // Apply mask to webcam
+                let maskedImage = webcamAtOrigin
+                    .applyingFilter("CIBlendWithAlphaMask", parameters: [
+                        "inputMaskImage": mask
+                    ])
+
+                // Add shadow
+                let shadowRadius = 30.0 * captureScaleFactor
+                let shadowOffset = CGSize(width: 0, height: -15 * captureScaleFactor)
+                let shadowOpacity: CGFloat = 0.7
+
+                let shadowMask = CIImage(color: CIColor.black).cropped(to: maskRect)
+                    .applyingFilter("CIBlendWithAlphaMask", parameters: ["inputMaskImage": mask])
+
+                let shadow = shadowMask
+                    .applyingFilter("CIGaussianBlur", parameters: ["inputRadius": shadowRadius])
+                    .transformed(by: CGAffineTransform(translationX: shadowOffset.width, y: shadowOffset.height))
+                    .applyingFilter("CIColorMatrix", parameters: [
+                        "inputAVector": CIVector(x: 0, y: 0, z: 0, w: shadowOpacity)
+                    ])
+
+                maskedWebcam = maskedImage.composited(over: shadow)
             }
 
-        case .roundedRectangle, .squircle:
-            // Keep rectangular for now - can add rounded corner filters later
-            break
+        case .squircle:
+            // Squircle uses rounded rectangle with continuous corner style (same as preview)
+            let maskRect = CGRect(origin: .zero, size: targetSize)
+            // Use same formula as SwiftUI preview: size * 0.22 for corner radius
+            let cornerRadius: CGFloat = targetSize.width * 0.22
+
+            if frameCount <= 3 {
+                print("  - Creating squircle mask: size=\(targetSize), radius=\(cornerRadius)")
+            }
+
+            // Create mask using SwiftUI rendering (same as preview)
+            if let mask = createSwiftUISquircleMask(size: targetSize, cornerRadius: cornerRadius) {
+                if frameCount <= 3 {
+                    print("  - Squircle mask created: extent=\(mask.extent)")
+                }
+
+                // Ensure webcam is cropped and positioned at origin
+                let croppedWebcam = scaledWebcam.cropped(to: maskRect)
+                let webcamAtOrigin = croppedWebcam.transformed(
+                    by: CGAffineTransform(translationX: -croppedWebcam.extent.origin.x, y: -croppedWebcam.extent.origin.y)
+                )
+
+                // Apply mask to webcam
+                let maskedImage = webcamAtOrigin
+                    .applyingFilter("CIBlendWithAlphaMask", parameters: [
+                        "inputMaskImage": mask
+                    ])
+
+                // Add shadow
+                let shadowRadius = 30.0 * captureScaleFactor
+                let shadowOffset = CGSize(width: 0, height: -15 * captureScaleFactor)
+                let shadowOpacity: CGFloat = 0.7
+
+                let shadowMask = CIImage(color: CIColor.black).cropped(to: maskRect)
+                    .applyingFilter("CIBlendWithAlphaMask", parameters: ["inputMaskImage": mask])
+
+                let shadow = shadowMask
+                    .applyingFilter("CIGaussianBlur", parameters: ["inputRadius": shadowRadius])
+                    .transformed(by: CGAffineTransform(translationX: shadowOffset.width, y: shadowOffset.height))
+                    .applyingFilter("CIColorMatrix", parameters: [
+                        "inputAVector": CIVector(x: 0, y: 0, z: 0, w: shadowOpacity)
+                    ])
+
+                maskedWebcam = maskedImage.composited(over: shadow)
+            }
         }
 
         // Position the webcam overlay on canvas
@@ -644,6 +720,199 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         )
 
         return positioned
+    }
+
+    /// Helper function to create a squircle mask using SwiftUI rendering
+    /// This ensures the recording matches the preview exactly
+    private func createSwiftUISquircleMask(size: CGSize, cornerRadius: CGFloat) -> CIImage? {
+        // Create SwiftUI view with the exact same shape as preview
+        let maskView = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(Color.white)
+            .frame(width: size.width, height: size.height)
+            .background(Color.clear)
+
+        // Render SwiftUI view to NSImage
+        let renderer = ImageRenderer(content: maskView)
+        renderer.scale = 1.0
+
+        guard let nsImage = renderer.nsImage,
+              let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return nil
+        }
+
+        return CIImage(cgImage: cgImage)
+    }
+
+    /// Helper function to create a rounded rectangle mask using Core Graphics
+    private func createRoundedRectangleMask(size: CGSize, cornerRadius: CGFloat, continuous: Bool = false) -> CIImage? {
+        let rect = CGRect(origin: .zero, size: size)
+
+        // Create an RGBA bitmap context for proper alpha mask
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bytesPerRow = Int(size.width) * 4
+
+        guard let context = CGContext(
+            data: nil,
+            width: Int(size.width),
+            height: Int(size.height),
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return nil
+        }
+
+        // Clear to transparent (RGBA: 0,0,0,0)
+        context.clear(rect)
+
+        // Draw white rounded rectangle with full alpha (RGBA: 1,1,1,1)
+        context.setFillColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0)
+
+        if continuous {
+            // Create squircle path using superellipse formula (continuous curve)
+            let path = createSquirclePath(in: rect, cornerRadius: cornerRadius)
+            context.addPath(path)
+        } else {
+            // Standard rounded rectangle
+            let path = CGPath(
+                roundedRect: rect,
+                cornerWidth: cornerRadius,
+                cornerHeight: cornerRadius,
+                transform: nil
+            )
+            context.addPath(path)
+        }
+
+        context.fillPath()
+
+        // Convert to CIImage
+        if let cgImage = context.makeImage() {
+            return CIImage(cgImage: cgImage)
+        }
+
+        return nil
+    }
+
+    /// Create a squircle path using superellipse formula (like SwiftUI's continuous corner style)
+    private func createSquirclePath(in rect: CGRect, cornerRadius: CGFloat) -> CGPath {
+        let path = CGMutablePath()
+        let width = rect.width
+        let height = rect.height
+        let radius = min(cornerRadius, min(width, height) / 2)
+
+        // Superellipse exponent (n=5 gives iOS-like squircle)
+        let n: CGFloat = 5.0
+
+        // Number of points for smooth curve
+        let segments = 100
+
+        // Start from top-left corner, going clockwise
+        var isFirst = true
+
+        // Top edge (with top-left and top-right squircle corners)
+        for i in 0...segments {
+            let t = CGFloat(i) / CGFloat(segments)
+            let x = radius + t * (width - 2 * radius)
+            let y: CGFloat
+
+            if x < radius {
+                // Top-left corner (squircle)
+                let angle = .pi / 2 * (1 - x / radius)
+                let offset = radius * pow(pow(cos(angle), n) + pow(sin(angle), n), -1/n)
+                y = radius - offset
+            } else if x > width - radius {
+                // Top-right corner (squircle)
+                let angle = .pi / 2 * ((x - (width - radius)) / radius)
+                let offset = radius * pow(pow(cos(angle), n) + pow(sin(angle), n), -1/n)
+                y = radius - offset
+            } else {
+                // Straight top edge
+                y = 0
+            }
+
+            if isFirst {
+                path.move(to: CGPoint(x: x, y: y))
+                isFirst = false
+            } else {
+                path.addLine(to: CGPoint(x: x, y: y))
+            }
+        }
+
+        // Right edge (with top-right and bottom-right squircle corners)
+        for i in 0...segments {
+            let t = CGFloat(i) / CGFloat(segments)
+            let y = radius + t * (height - 2 * radius)
+            let x: CGFloat
+
+            if y < radius {
+                // Top-right corner
+                let angle = .pi / 2 * (y / radius)
+                let offset = radius * pow(pow(cos(angle), n) + pow(sin(angle), n), -1/n)
+                x = width - radius + offset
+            } else if y > height - radius {
+                // Bottom-right corner
+                let angle = .pi / 2 * (1 - (y - (height - radius)) / radius)
+                let offset = radius * pow(pow(cos(angle), n) + pow(sin(angle), n), -1/n)
+                x = width - radius + offset
+            } else {
+                // Straight right edge
+                x = width
+            }
+
+            path.addLine(to: CGPoint(x: x, y: y))
+        }
+
+        // Bottom edge (with bottom-right and bottom-left squircle corners)
+        for i in 0...segments {
+            let t = CGFloat(i) / CGFloat(segments)
+            let x = width - radius - t * (width - 2 * radius)
+            let y: CGFloat
+
+            if x > width - radius {
+                // Bottom-right corner
+                let angle = .pi / 2 * ((width - x) / radius)
+                let offset = radius * pow(pow(cos(angle), n) + pow(sin(angle), n), -1/n)
+                y = height - radius + offset
+            } else if x < radius {
+                // Bottom-left corner
+                let angle = .pi / 2 * (1 - x / radius)
+                let offset = radius * pow(pow(cos(angle), n) + pow(sin(angle), n), -1/n)
+                y = height - radius + offset
+            } else {
+                // Straight bottom edge
+                y = height
+            }
+
+            path.addLine(to: CGPoint(x: x, y: y))
+        }
+
+        // Left edge (with bottom-left and top-left squircle corners)
+        for i in 0...segments {
+            let t = CGFloat(i) / CGFloat(segments)
+            let y = height - radius - t * (height - 2 * radius)
+            let x: CGFloat
+
+            if y > height - radius {
+                // Bottom-left corner
+                let angle = .pi / 2 * ((height - y) / radius)
+                let offset = radius * pow(pow(cos(angle), n) + pow(sin(angle), n), -1/n)
+                x = radius - offset
+            } else if y < radius {
+                // Top-left corner
+                let angle = .pi / 2 * (y / radius)
+                let offset = radius * pow(pow(cos(angle), n) + pow(sin(angle), n), -1/n)
+                x = radius - offset
+            } else {
+                // Straight left edge
+                x = 0
+            }
+
+            path.addLine(to: CGPoint(x: x, y: y))
+        }
+
+        path.closeSubpath()
+        return path
     }
 
     enum RecordingError: LocalizedError {

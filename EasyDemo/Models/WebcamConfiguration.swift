@@ -14,8 +14,6 @@ struct WebcamConfiguration: Codable {
     var shape: Shape
     var position: Position
     var size: CGFloat
-    var borderColor: String
-    var borderWidth: CGFloat
 
     enum Shape: String, Codable, CaseIterable, Identifiable {
         case circle = "Circle"
@@ -57,8 +55,6 @@ struct WebcamConfiguration: Codable {
         isEnabled: false,
         shape: .circle,
         position: .bottomRight,
-        size: 200,
-        borderColor: "white",
-        borderWidth: 3.0
+        size: 200
     )
 }

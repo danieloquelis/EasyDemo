@@ -76,11 +76,13 @@ struct SetupView: View {
                             showingWindowSelector = true
                         }
                         .buttonStyle(.borderless)
+                        .disabled(recordingEngine.isRecording)
                     }
                 } else {
                     Button("Select Window") {
                         showingWindowSelector = true
                     }
+                    .disabled(recordingEngine.isRecording)
                 }
             }
 
@@ -98,6 +100,7 @@ struct SetupView: View {
 
                         Slider(value: $windowScale, in: 0.2...1.0, step: 0.05)
                             .tint(.accentColor)
+                            .disabled(recordingEngine.isRecording)
 
                         HStack {
                             Text("20%")
@@ -129,13 +132,20 @@ struct SetupView: View {
                             Image(systemName: expandedSection == .background ? "chevron.down" : "chevron.right")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
+                                .rotationEffect(.degrees(expandedSection == .background ? 0 : 0))
                         }
                     }
                     .buttonStyle(.plain)
+                    .disabled(recordingEngine.isRecording)
 
                     if expandedSection == .background {
                         BackgroundSelectionView(selectedBackground: $selectedBackground)
                             .padding(.top, 8)
+                            .padding(.bottom, 8)
+                            .padding(.horizontal, 8)
+                            .background(Color(.controlBackgroundColor).opacity(0.5))
+                            .cornerRadius(8)
+                            .disabled(recordingEngine.isRecording)
                     }
                 }
 
@@ -159,10 +169,16 @@ struct SetupView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .disabled(recordingEngine.isRecording)
 
                     if expandedSection == .webcam {
                         WebcamSettingsView(configuration: $webcamConfig)
                             .padding(.top, 8)
+                            .padding(.bottom, 8)
+                            .padding(.horizontal, 8)
+                            .background(Color(.controlBackgroundColor).opacity(0.5))
+                            .cornerRadius(8)
+                            .disabled(recordingEngine.isRecording)
                     }
                 }
 
@@ -186,6 +202,7 @@ struct SetupView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .disabled(recordingEngine.isRecording)
 
                     if expandedSection == .advanced {
                         RecordingSettingsView(
@@ -194,6 +211,11 @@ struct SetupView: View {
                             frameRate: $frameRate
                         )
                         .padding(.top, 8)
+                        .padding(.bottom, 8)
+                        .padding(.horizontal, 8)
+                        .background(Color(.controlBackgroundColor).opacity(0.5))
+                        .cornerRadius(8)
+                        .disabled(recordingEngine.isRecording)
                     }
                 }
 
@@ -217,6 +239,7 @@ struct SetupView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .disabled(recordingEngine.isRecording)
 
                     if expandedSection == .output {
                         VStack(alignment: .leading, spacing: 8) {
@@ -241,8 +264,13 @@ struct SetupView: View {
                             .padding(8)
                             .background(Color(.controlBackgroundColor))
                             .cornerRadius(8)
+                            .disabled(recordingEngine.isRecording)
                         }
                         .padding(.top, 8)
+                        .padding(.bottom, 8)
+                        .padding(.horizontal, 8)
+                        .background(Color(.controlBackgroundColor).opacity(0.5))
+                        .cornerRadius(8)
                     }
                 }
 

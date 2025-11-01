@@ -115,6 +115,14 @@ struct WebcamSettingsView: View {
                 }
             }
         }
+        .onAppear {
+            // Restart webcam capture if enabled when view appears
+            if configuration.isEnabled && !webcam.isCapturing {
+                Task {
+                    try? await webcam.startCapture()
+                }
+            }
+        }
         .onDisappear {
             webcam.stopCapture()
         }

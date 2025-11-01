@@ -16,13 +16,21 @@ struct SetupView: View {
     @State private var selectedResolution: RecordingConfiguration.Resolution = .original
     @State private var selectedCodec: RecordingConfiguration.VideoCodec = .h264
     @State private var frameRate: Int = 60
-    @State private var windowScale: Double = 1.0  // 100% by default
+    @State private var windowScale: Double = 0.8  // 80% by default
     @State private var showingWindowSelector = true
-    @State private var showAdvancedSettings = false
+    @State private var expandedSection: SidebarSection? = nil
     @State private var recordingResult: RecordingResult?
     @State private var outputDirectory: URL?
     @State private var showingFolderPicker = false
     @StateObject private var recordingEngine = RecordingEngine()
+
+    enum SidebarSection: Hashable {
+        case windowSize
+        case background
+        case webcam
+        case advanced
+        case output
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -104,60 +112,137 @@ struct SetupView: View {
                     .padding(.vertical, 4)
                 }
 
-                Section("Background") {
-                    BackgroundSelectionView(selectedBackground: $selectedBackground)
-                }
+                Section {
+                    Button {
+                        expandedSection = expandedSection == .background ? nil : .background
+                    } label: {
+                        HStack {
+                            Label {
+                                Text("Background")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                            } icon: {
+                                Image(systemName: "photo")
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: expandedSection == .background ? "chevron.down" : "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
 
-                Section("Webcam Overlay") {
-                    WebcamSettingsView(configuration: $webcamConfig)
+                    if expandedSection == .background {
+                        BackgroundSelectionView(selectedBackground: $selectedBackground)
+                            .padding(.top, 8)
+                    }
                 }
 
                 Section {
-                    DisclosureGroup(
-                        isExpanded: $showAdvancedSettings,
-                        content: {
-                            RecordingSettingsView(
-                                selectedResolution: $selectedResolution,
-                                selectedCodec: $selectedCodec,
-                                frameRate: $frameRate
-                            )
-                            .padding(.top, 8)
-                        },
-                        label: {
-                            HStack {
-                                Image(systemName: "gearshape.2")
+                    Button {
+                        expandedSection = expandedSection == .webcam ? nil : .webcam
+                    } label: {
+                        HStack {
+                            Label {
+                                Text("Webcam Overlay")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                            } icon: {
+                                Image(systemName: "video.circle")
                                     .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: expandedSection == .webcam ? "chevron.down" : "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    if expandedSection == .webcam {
+                        WebcamSettingsView(configuration: $webcamConfig)
+                            .padding(.top, 8)
+                    }
+                }
+
+                Section {
+                    Button {
+                        expandedSection = expandedSection == .advanced ? nil : .advanced
+                    } label: {
+                        HStack {
+                            Label {
                                 Text("Advanced Quality Settings")
                                     .font(.subheadline)
                                     .fontWeight(.medium)
-                            }
-                        }
-                    )
-                }
-
-                Section("Output") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Save Location")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-
-                        Button {
-                            showingFolderPicker = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "folder")
-                                Text(outputDirectory?.lastPathComponent ?? "Movies/EasyDemo")
-                                    .lineLimit(1)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
+                            } icon: {
+                                Image(systemName: "gearshape.2")
                                     .foregroundColor(.secondary)
                             }
+                            Spacer()
+                            Image(systemName: expandedSection == .advanced ? "chevron.down" : "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
-                        .buttonStyle(.plain)
-                        .padding(8)
-                        .background(Color(.controlBackgroundColor))
-                        .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+
+                    if expandedSection == .advanced {
+                        RecordingSettingsView(
+                            selectedResolution: $selectedResolution,
+                            selectedCodec: $selectedCodec,
+                            frameRate: $frameRate
+                        )
+                        .padding(.top, 8)
+                    }
+                }
+
+                Section {
+                    Button {
+                        expandedSection = expandedSection == .output ? nil : .output
+                    } label: {
+                        HStack {
+                            Label {
+                                Text("Output")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                            } icon: {
+                                Image(systemName: "folder")
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: expandedSection == .output ? "chevron.down" : "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    if expandedSection == .output {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Save Location")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+
+                            Button {
+                                showingFolderPicker = true
+                            } label: {
+                                HStack {
+                                    Image(systemName: "folder")
+                                    Text(outputDirectory?.lastPathComponent ?? "Movies/EasyDemo")
+                                        .lineLimit(1)
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .padding(8)
+                            .background(Color(.controlBackgroundColor))
+                            .cornerRadius(8)
+                        }
+                        .padding(.top, 8)
                     }
                 }
 

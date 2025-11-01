@@ -26,8 +26,21 @@ struct WindowSelectionView: View {
             }
             .padding(.top, 30)
 
-            // Permission check
-            if !viewModel.windowCapture.hasScreenRecordingPermission {
+            // Loading, permission check, or window list
+            if viewModel.windowCapture.isCheckingPermission {
+                // Show loading state while checking permissions
+                VStack(spacing: 16) {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .padding()
+
+                    Text("Checking permissions...")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .padding(40)
+            } else if !viewModel.windowCapture.hasScreenRecordingPermission {
+                // Show permission request UI if denied
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.shield.fill")
                         .font(.system(size: 48))
@@ -50,33 +63,49 @@ struct WindowSelectionView: View {
                 }
                 .padding(40)
             } else {
-                // Window list
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(viewModel.windowCapture.availableWindows) { window in
-                            WindowRowView(window: window, isSelected: selectedWindow?.id == window.id)
-                                .onTapGesture {
-                                    selectedWindow = window
-                                }
+                // Window list or loading
+                if viewModel.isRefreshing && viewModel.windowCapture.availableWindows.isEmpty {
+                    // Show loading state while fetching windows for the first time
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .padding()
+
+                        Text("Loading windows...")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(40)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    // Window list
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(viewModel.windowCapture.availableWindows) { window in
+                                WindowRowView(window: window, isSelected: selectedWindow?.id == window.id)
+                                    .onTapGesture {
+                                        selectedWindow = window
+                                    }
+                            }
                         }
+                        .padding(.horizontal)
+                    }
+
+                    // Refresh button
+                    HStack {
+                        Spacer()
+                        Button {
+                            Task {
+                                await viewModel.refreshWindows()
+                            }
+                        } label: {
+                            Label("Refresh Windows", systemImage: "arrow.clockwise")
+                        }
+                        .disabled(viewModel.isRefreshing)
                     }
                     .padding(.horizontal)
+                    .padding(.bottom, 20)
                 }
-
-                // Refresh button
-                HStack {
-                    Spacer()
-                    Button {
-                        Task {
-                            await viewModel.refreshWindows()
-                        }
-                    } label: {
-                        Label("Refresh Windows", systemImage: "arrow.clockwise")
-                    }
-                    .disabled(viewModel.isRefreshing)
-                }
-                .padding(.horizontal)
-                .padding(.bottom, 20)
             }
         }
         .frame(minWidth: 600, minHeight: 400)

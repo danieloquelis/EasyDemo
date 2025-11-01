@@ -19,7 +19,12 @@ class WindowSelectionViewModel: ObservableObject {
 
     init() {
         Task {
-            await refreshWindows()
+            // Wait for permission check to complete first
+            await windowCapture.checkScreenRecordingPermission()
+            // Then automatically load windows if permission is granted
+            if windowCapture.hasScreenRecordingPermission {
+                await refreshWindows()
+            }
         }
     }
 

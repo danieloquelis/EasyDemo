@@ -16,6 +16,7 @@ import ScreenCaptureKit
 class WindowCapture: ObservableObject {
     @Published var availableWindows: [WindowInfo] = []
     @Published var hasScreenRecordingPermission = false
+    @Published var isCheckingPermission = true
 
     init() {
         Task {
@@ -25,6 +26,7 @@ class WindowCapture: ObservableObject {
 
     /// Check if screen recording permission is granted
     func checkScreenRecordingPermission() async {
+        isCheckingPermission = true
         do {
             // Attempt to get shareable content to check permission
             _ = try await SCShareableContent.current
@@ -32,6 +34,7 @@ class WindowCapture: ObservableObject {
         } catch {
             hasScreenRecordingPermission = false
         }
+        isCheckingPermission = false
     }
 
     /// Request screen recording permission from the user

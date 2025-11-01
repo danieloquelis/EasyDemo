@@ -16,6 +16,7 @@ struct SetupView: View {
     @State private var selectedResolution: RecordingConfiguration.Resolution = .original
     @State private var selectedCodec: RecordingConfiguration.VideoCodec = .h264
     @State private var frameRate: Int = 60
+    @State private var windowScale: Double = 1.0  // 100% by default
     @State private var showingWindowSelector = true
     @State private var showAdvancedSettings = false
     @State private var recordingResult: RecordingResult?
@@ -34,8 +35,10 @@ struct SetupView: View {
                 WindowPreviewView(
                     window: window,
                     backgroundStyle: selectedBackground,
-                    webcamConfig: webcamConfig
+                    webcamConfig: webcamConfig,
+                    windowScale: windowScale
                 )
+                .id(window.id)  // Force recreation when window changes
                 .navigationTitle("Preview")
             } else {
                 emptyPreviewState
@@ -74,6 +77,33 @@ struct SetupView: View {
             }
 
             if selectedWindow != nil {
+                Section("Window Size") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Scale:")
+                                .font(.subheadline)
+                            Spacer()
+                            Text("\(Int(windowScale * 100))%")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Slider(value: $windowScale, in: 0.2...1.0, step: 0.05)
+                            .tint(.accentColor)
+
+                        HStack {
+                            Text("20%")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text("100%")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+
                 Section("Background") {
                     BackgroundSelectionView(selectedBackground: $selectedBackground)
                 }
@@ -168,7 +198,8 @@ struct SetupView: View {
                                     resolution: selectedResolution,
                                     frameRate: frameRate,
                                     codec: selectedCodec,
-                                    outputDirectory: outputDirectory
+                                    outputDirectory: outputDirectory,
+                                    windowScale: windowScale
                                 )
                                 Task {
                                     do {

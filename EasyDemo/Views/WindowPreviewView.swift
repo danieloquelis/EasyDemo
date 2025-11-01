@@ -12,6 +12,7 @@ struct WindowPreviewView: View {
     let window: WindowInfo
     let backgroundStyle: BackgroundStyle
     let webcamConfig: WebcamConfiguration?
+    let windowScale: Double  // 0.2 to 1.0 (20% to 100%)
     @StateObject private var preview = WindowPreview()
     @StateObject private var webcam = WebcamCapture()
 
@@ -120,11 +121,14 @@ struct WindowPreviewView: View {
         // Calculate scale to fit within available space
         let widthScale = availableWidth / imageSize.width
         let heightScale = availableHeight / imageSize.height
-        let scale = min(widthScale, heightScale, 1.0)  // Never scale up beyond original size
+        let fitScale = min(widthScale, heightScale, 1.0)  // Never scale up beyond original size
+
+        // Apply user-defined window scale (0.2 to 1.0)
+        let finalScale = fitScale * windowScale
 
         return CGSize(
-            width: imageSize.width * scale,
-            height: imageSize.height * scale
+            width: imageSize.width * finalScale,
+            height: imageSize.height * finalScale
         )
     }
 
@@ -232,7 +236,8 @@ struct WebcamOverlayView: View {
             scWindow: nil
         ),
         backgroundStyle: .solidColor(.black),
-        webcamConfig: nil
+        webcamConfig: nil,
+        windowScale: 1.0
     )
 }
 

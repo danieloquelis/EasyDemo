@@ -374,11 +374,21 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
             style: configuration.background
         )
 
-        // Window image centered on canvas
+        // Window image with user-defined scale
         let windowImage = CIImage(cvPixelBuffer: windowBuffer)
-        let xOffset = CGFloat(marginInPixels) / 2
-        let yOffset = CGFloat(marginInPixels) / 2
-        let centeredWindow = windowImage.transformed(
+
+        // Apply window scale (0.2 to 1.0)
+        let windowScale = CGFloat(configuration.windowScale)
+        let scaledWindow = windowImage.transformed(
+            by: CGAffineTransform(scaleX: windowScale, y: windowScale)
+        )
+
+        // Center the scaled window on canvas
+        let scaledWidth = windowImage.extent.width * windowScale
+        let scaledHeight = windowImage.extent.height * windowScale
+        let xOffset = (CGFloat(nativeWidth) - scaledWidth) / 2
+        let yOffset = (CGFloat(nativeHeight) - scaledHeight) / 2
+        let centeredWindow = scaledWindow.transformed(
             by: CGAffineTransform(translationX: xOffset, y: yOffset)
         )
 

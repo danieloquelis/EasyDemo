@@ -18,6 +18,7 @@ struct RecordingConfiguration {
     let frameRate: Int
     let codec: VideoCodec
     let outputURL: URL
+    let windowScale: Double  // Scale factor for window size (0.2 to 1.0, where 1.0 is 100%)
 
     enum Resolution: String, CaseIterable, Identifiable {
         case hd1080 = "1080p HD"
@@ -67,7 +68,8 @@ struct RecordingConfiguration {
         resolution: Resolution = .original,
         frameRate: Int = 60,
         codec: VideoCodec = .h264,
-        outputDirectory: URL? = nil
+        outputDirectory: URL? = nil,
+        windowScale: Double = 1.0
     ) -> RecordingConfiguration {
         // For sandboxed apps, we need to write to temp directory first
         // Then move to user-selected location after recording
@@ -98,7 +100,8 @@ struct RecordingConfiguration {
             resolution: resolution,
             frameRate: frameRate,
             codec: codec,
-            outputURL: outputURL
+            outputURL: outputURL,
+            windowScale: windowScale
         )
     }
 }

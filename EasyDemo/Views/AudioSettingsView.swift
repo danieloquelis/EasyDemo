@@ -80,48 +80,6 @@ struct AudioSettingsView: View {
                 }
             }
 
-            Divider()
-
-            // System Audio Section
-            VStack(alignment: .leading, spacing: 12) {
-                Toggle("Record System Audio", isOn: $configuration.systemAudioEnabled)
-                    .font(.headline)
-
-                if configuration.systemAudioEnabled {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Volume")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                            Spacer()
-                            Text("\(Int(configuration.systemAudioVolume * 100))%")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
-
-                        Slider(value: $configuration.systemAudioVolume, in: 0.0...1.0, step: 0.05)
-                    }
-                    .padding(.leading, 20)
-
-                    // Info about system audio
-                    HStack(alignment: .top, spacing: 6) {
-                        Image(systemName: "info.circle.fill")
-                            .foregroundColor(.blue)
-                            .font(.caption)
-                            .frame(width: 12, height: 12)
-                            .padding(.top, 2)
-                        Text("System audio captures all sounds from your Mac, including apps, notifications, and media playback.")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .lineLimit(nil)
-                    }
-                    .padding(8)
-                    .background(Color(.controlBackgroundColor).opacity(0.5))
-                    .cornerRadius(6)
-                    .padding(.leading, 20)
-                }
-            }
 
             if configuration.isEnabled {
                 Divider()
@@ -221,14 +179,10 @@ struct AudioSettingsView: View {
     }
 
     private func getProTip() -> String {
-        if configuration.microphoneEnabled && configuration.systemAudioEnabled {
-            return "Recording both microphone and system audio is great for tutorials. Adjust volumes to balance your voice and app sounds."
-        } else if configuration.microphoneEnabled {
-            return "Microphone-only recording is perfect for voiceovers and commentary."
-        } else if configuration.systemAudioEnabled {
-            return "System audio-only recording captures all sounds from your Mac, great for showcasing app features."
+        if configuration.microphoneEnabled {
+            return "Adjust microphone volume to balance your voice in the recording."
         } else {
-            return "Enable at least one audio source to include sound in your recording."
+            return "Enable microphone to include audio in your recording."
         }
     }
 }

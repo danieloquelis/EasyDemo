@@ -49,8 +49,8 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         // Setup asset writer - this starts the recording session and sets self.startTime
         try setupAssetWriter(configuration: configuration)
 
-        // Start audio capture with the same start time as the asset writer
-        if configuration.audio.isEnabled {
+        // Start microphone/audio capture if enabled
+        if configuration.audio.microphoneEnabled {
             let audioService = AudioCaptureService()
             try await audioService.startCapture(
                 configuration: configuration.audio,
@@ -177,8 +177,8 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
 
         writer.add(videoInput)
 
-        // Add audio input if audio is enabled
-        if configuration.audio.isEnabled {
+        // Add audio input if enabled
+        if configuration.audio.microphoneEnabled {
             let audioSettings = createAudioSettings(quality: configuration.audio.quality)
             let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
             audioInput.expectsMediaDataInRealTime = true
@@ -280,6 +280,18 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
         of type: SCStreamOutputType
     ) {
+        switch type {
+        case .screen:
+            handleVideoSample(sampleBuffer)
+        case .audio, .microphone:
+            // Audio is handled by AudioCaptureService
+            break
+        @unknown default:
+            break
+        }
+    }
+
+    private func handleVideoSample(_ sampleBuffer: CMSampleBuffer) {
         guard let configuration = configuration,
               let videoInput = videoInput,
               let adaptor = pixelBufferAdaptor,
@@ -313,6 +325,7 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         }
     }
 
+
     nonisolated private func processAudioSample(_ sampleBuffer: CMSampleBuffer) {
         Task { @MainActor in
             guard let audioInput = self.audioInput,
@@ -320,7 +333,7 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
                 return
             }
 
-            // Append the audio sample directly - timing is already handled in AudioCaptureService
+            // Append the audio sample (already has correct timestamp from AudioCaptureService)
             audioInput.append(sampleBuffer)
             self.audioSampleCount += 1
         }

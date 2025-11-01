@@ -12,27 +12,19 @@ struct AudioConfiguration: Equatable {
     /// Whether microphone audio is enabled
     var microphoneEnabled: Bool
 
-    /// Whether system audio capture is enabled
-    var systemAudioEnabled: Bool
-
     /// Selected microphone device ID
     var selectedMicrophoneDeviceID: String?
 
     /// Microphone volume (0.0 - 1.0)
     var microphoneVolume: Float
 
-    /// System audio volume (0.0 - 1.0)
-    var systemAudioVolume: Float
-
     /// Audio quality/bitrate
     var quality: AudioQuality
 
     static func == (lhs: AudioConfiguration, rhs: AudioConfiguration) -> Bool {
         lhs.microphoneEnabled == rhs.microphoneEnabled &&
-        lhs.systemAudioEnabled == rhs.systemAudioEnabled &&
         lhs.selectedMicrophoneDeviceID == rhs.selectedMicrophoneDeviceID &&
         lhs.microphoneVolume == rhs.microphoneVolume &&
-        lhs.systemAudioVolume == rhs.systemAudioVolume &&
         lhs.quality == rhs.quality
     }
 
@@ -61,16 +53,14 @@ struct AudioConfiguration: Equatable {
 
     /// Whether any audio is enabled
     var isEnabled: Bool {
-        microphoneEnabled || systemAudioEnabled
+        microphoneEnabled
     }
 
     static var `default`: AudioConfiguration {
         AudioConfiguration(
             microphoneEnabled: false,
-            systemAudioEnabled: false,
             selectedMicrophoneDeviceID: nil,
             microphoneVolume: 1.0,
-            systemAudioVolume: 0.8,
             quality: .high
         )
     }

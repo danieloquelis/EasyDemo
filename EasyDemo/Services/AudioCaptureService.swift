@@ -6,11 +6,10 @@
 
 import Foundation
 import AVFoundation
-import ScreenCaptureKit
 import CoreAudio
 import Combine
 
-/// Service responsible for capturing audio from microphone and system audio
+/// Service responsible for capturing audio from microphone
 @MainActor
 class AudioCaptureService: NSObject, ObservableObject {
     @Published var isCapturing = false
@@ -21,13 +20,10 @@ class AudioCaptureService: NSObject, ObservableObject {
     private var microphoneBuffer: AVAudioPCMBuffer?
     private var selectedMicrophoneDevice: AVCaptureDevice?
 
-    private var systemAudioStream: SCStream?
-    private var systemAudioBuffer: CMSampleBuffer?
-
     private var configuration: AudioConfiguration?
 
-    // Audio mixing buffers
-    private var mixedAudioCallback: ((CMSampleBuffer) -> Void)?
+    // Audio callback
+    private var microphoneCallback: ((CMSampleBuffer) -> Void)?
 
     // Timing
     private var audioStartTime: CMTime?
@@ -80,10 +76,14 @@ class AudioCaptureService: NSObject, ObservableObject {
     // MARK: - Capture Control
 
     /// Start capturing audio based on configuration
-    func startCapture(configuration: AudioConfiguration, sessionStartTime: CMTime? = nil, callback: @escaping (CMSampleBuffer) -> Void) async throws {
+    func startCapture(
+        configuration: AudioConfiguration,
+        sessionStartTime: CMTime? = nil,
+        callback: @escaping (CMSampleBuffer) -> Void
+    ) async throws {
         guard !isCapturing else { return }
         self.configuration = configuration
-        self.mixedAudioCallback = callback
+        self.microphoneCallback = callback
 
         // Use provided session start time or create new one
         if let sessionStartTime = sessionStartTime {
@@ -110,19 +110,14 @@ class AudioCaptureService: NSObject, ObservableObject {
             try startMicrophoneCapture(volume: configuration.microphoneVolume, quality: configuration.quality)
         }
 
-        if configuration.systemAudioEnabled {
-            try await startSystemAudioCapture(volume: configuration.systemAudioVolume, quality: configuration.quality)
-        }
-
-        isCapturing = true
+        isCapturing = configuration.microphoneEnabled
     }
 
     /// Stop capturing audio
     func stopCapture() {
         stopMicrophoneCapture()
-        stopSystemAudioCapture()
         isCapturing = false
-        mixedAudioCallback = nil
+        microphoneCallback = nil
         audioStartTime = nil
         firstAudioSampleTime = nil
     }
@@ -168,10 +163,10 @@ class AudioCaptureService: NSObject, ObservableObject {
             // Apply volume adjustment
             self.applyVolume(to: buffer, volume: volume)
 
-            // Convert to CMSampleBuffer and send to callback
+            // Convert to CMSampleBuffer and send to microphone callback
             if let sampleBuffer = self.createSampleBuffer(from: buffer, time: time) {
                 Task { @MainActor in
-                    self.mixedAudioCallback?(sampleBuffer)
+                    self.microphoneCallback?(sampleBuffer)
                 }
             }
         }
@@ -190,37 +185,6 @@ class AudioCaptureService: NSObject, ObservableObject {
         microphoneNode = nil
     }
 
-    // MARK: - System Audio Capture
-
-    private func startSystemAudioCapture(volume: Float, quality: AudioConfiguration.AudioQuality) async throws {
-        let content = try await SCShareableContent.current
-
-        // Create a filter that captures system audio
-        let filter = SCContentFilter(
-            display: content.displays.first!,
-            excludingWindows: []
-        )
-
-        let streamConfig = SCStreamConfiguration()
-        streamConfig.capturesAudio = true
-        streamConfig.sampleRate = Int(quality.sampleRate)
-        streamConfig.channelCount = 2
-
-        let stream = SCStream(filter: filter, configuration: streamConfig, delegate: nil)
-        try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: .main)
-
-        self.systemAudioStream = stream
-        try await stream.startCapture()
-    }
-
-    private func stopSystemAudioCapture() {
-        if let stream = systemAudioStream {
-            Task {
-                try? await stream.stopCapture()
-            }
-        }
-        systemAudioStream = nil
-    }
 
     // MARK: - Audio Processing
 
@@ -401,22 +365,6 @@ class AudioCaptureService: NSObject, ObservableObject {
     }
 }
 
-// MARK: - SCStreamOutput for System Audio
-
-extension AudioCaptureService: SCStreamOutput {
-    nonisolated func stream(
-        _ stream: SCStream,
-        didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
-        of type: SCStreamOutputType
-    ) {
-        guard type == .audio else { return }
-
-        Task { @MainActor in
-            // Pass through system audio to callback
-            self.mixedAudioCallback?(sampleBuffer)
-        }
-    }
-}
 
 // MARK: - Helper Extensions
 

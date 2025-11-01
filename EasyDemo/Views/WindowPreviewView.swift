@@ -95,6 +95,17 @@ struct WindowPreviewView: View {
                 try? await webcam.startCapture()
             }
         }
+        .onChange(of: webcamConfig?.isEnabled) { _, isEnabled in
+            // Stop webcam when disabled
+            if isEnabled == false {
+                webcam.stopCapture()
+            } else if isEnabled == true {
+                // Start webcam when enabled
+                Task {
+                    try? await webcam.startCapture()
+                }
+            }
+        }
         .onDisappear {
             webcam.stopCapture()
         }

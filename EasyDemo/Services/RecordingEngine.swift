@@ -44,6 +44,10 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
     private var cachedMaskSize: CGSize = .zero
     private var cachedMaskShape: WebcamConfiguration.Shape?
 
+    // Cache for custom background image to avoid repeated disk I/O
+    private var cachedBackgroundImage: CIImage?
+    private var cachedBackgroundURL: URL?
+
     /// Start recording with the given configuration
     func startRecording(configuration: RecordingConfiguration) async throws {
         guard !isRecording else { return }
@@ -479,19 +483,35 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
             return CIImage(color: CIColor.black).cropped(to: rect)
 
         case .image(let url):
-            // Handle security-scoped resources
-            let didStartAccessing = url.startAccessingSecurityScopedResource()
-            defer {
-                if didStartAccessing {
-                    url.stopAccessingSecurityScopedResource()
+            // Check if we can use cached image
+            let baseImage: CIImage?
+            if let cachedImage = cachedBackgroundImage, cachedBackgroundURL == url {
+                baseImage = cachedImage
+            } else {
+                // Load and cache the image
+                let didStartAccessing = url.startAccessingSecurityScopedResource()
+                defer {
+                    if didStartAccessing {
+                        url.stopAccessingSecurityScopedResource()
+                    }
+                }
+
+                if let nsImage = NSImage(contentsOf: url),
+                   let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                    baseImage = CIImage(cgImage: cgImage)
+                    cachedBackgroundImage = baseImage
+                    cachedBackgroundURL = url
+                } else {
+                    baseImage = nil
                 }
             }
 
-            if let nsImage = NSImage(contentsOf: url),
-               let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) {
-                let ciImage = CIImage(cgImage: cgImage)
-                // Scale to fit
-                let scale = max(size.width / ciImage.extent.width, size.height / ciImage.extent.height)
+            if let ciImage = baseImage {
+                // Scale to fit - use simpler scaling for better performance
+                let scaleX = size.width / ciImage.extent.width
+                let scaleY = size.height / ciImage.extent.height
+                let scale = max(scaleX, scaleY)
+
                 return ciImage
                     .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
                     .cropped(to: rect)

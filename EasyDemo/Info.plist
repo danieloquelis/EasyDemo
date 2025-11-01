@@ -4,6 +4,10 @@
 <dict>
 	<key>CFBundleDisplayName</key>
 	<string>EasyDemo</string>
+	<key>CFBundleName</key>
+	<string>EasyDemo</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2025 Daniel Oquelis</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSMicrophoneUsageDescription</key>

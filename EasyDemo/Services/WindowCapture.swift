@@ -78,33 +78,13 @@ class WindowCapture: ObservableObject {
                     continue
                 }
 
-                // Skip windows with zero or invalid bounds
-                guard window.frame.width > 100 && window.frame.height > 100 else {
-                    continue
-                }
-
                 // Skip windows without an owning application
                 guard let app = window.owningApplication else {
                     continue
                 }
 
-                // Skip windows that are not on screen (layer > 0 usually means background)
-                guard window.isOnScreen else {
-                    continue
-                }
-
-                // Skip minimized windows
-                guard !window.frame.isEmpty else {
-                    continue
-                }
-
-                // Only include windows with titles or from major apps
-                let hasTitle = window.title != nil && !window.title!.isEmpty
-                let isMajorApp = app.applicationName != "Window Server" &&
-                                app.applicationName != "Dock" &&
-                                app.applicationName != "SystemUIServer"
-
-                guard hasTitle || isMajorApp else {
+                // Apply generic filters to identify recordable windows
+                guard isRecordableWindow(window, app: app) else {
                     continue
                 }
 
@@ -133,6 +113,87 @@ class WindowCapture: ObservableObject {
         } catch {
             print("Failed to enumerate windows: \(error)")
         }
+    }
+
+    /// Generic filter to determine if a window is recordable by the user
+    /// Uses heuristics based on window properties without hardcoding app names
+    private func isRecordableWindow(_ window: SCWindow, app: SCRunningApplication) -> Bool {
+        // 1. Minimum size check - user windows are typically larger
+        // System UI elements and background processes have small or zero sizes
+        guard window.frame.width > 100 && window.frame.height > 100 else {
+            return false
+        }
+
+        // 2. Window must be on screen and not minimized
+        guard window.isOnScreen && !window.frame.isEmpty else {
+            return false
+        }
+
+        // 3. Window must have a meaningful title
+        // System windows often have no title or generic titles like "Wallpaper", "Dock", "Backstop"
+        guard let title = window.title, !title.isEmpty else {
+            return false
+        }
+
+        // 4. Filter out common system window patterns by title
+        let systemWindowPatterns = [
+            "wallpaper",
+            "backstop",
+            "dock",
+            "item-0",
+            "window"
+        ]
+
+        let titleLower = title.lowercased()
+        for pattern in systemWindowPatterns {
+            if titleLower.contains(pattern) {
+                return false
+            }
+        }
+
+        // 5. Filter out windows with display names (e.g., "Display 1")
+        if titleLower.starts(with: "display") {
+            return false
+        }
+
+        // 6. Filter out windows that start with special characters or are unnamed
+        // These are typically system UI elements
+        let trimmedTitle = title.trimmingCharacters(in: .whitespaces)
+        if trimmedTitle.isEmpty || trimmedTitle.hasPrefix("-") {
+            return false
+        }
+
+        // 7. Window layer check - windows at layer 0 are typically user-facing
+        // Background system windows often have higher layers
+        guard window.windowLayer == 0 else {
+            return false
+        }
+
+        // 8. Additional check: window should have reasonable aspect ratio
+        // Extremely thin or wide windows are likely UI elements
+        let aspectRatio = window.frame.width / window.frame.height
+        guard aspectRatio > 0.3 && aspectRatio < 5.0 else {
+            return false
+        }
+
+        // 9. Check if the app bundle identifier suggests it's a system component
+        // System apps often have com.apple.* bundle IDs with specific patterns
+        let bundleID = app.bundleIdentifier
+        let systemBundlePatterns = [
+            "com.apple.dock",
+            "com.apple.systemuiserver",
+            "com.apple.windowserver",
+            "com.apple.screencapturekit"
+        ]
+
+        let bundleLower = bundleID.lowercased()
+        for pattern in systemBundlePatterns {
+            if bundleLower.contains(pattern) {
+                return false
+            }
+        }
+
+        return true
     }
 
     /// Capture a thumbnail of a specific window

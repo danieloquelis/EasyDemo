@@ -1,15 +1,7 @@
-//
-//  RecordingConfiguration.swift
-//  EasyDemo
-//
-//  Created by Daniel Oquelis on 28.10.25.
-//
-
 import Foundation
 import CoreGraphics
 import AVFoundation
 
-/// Configuration for recording settings
 struct RecordingConfiguration {
     let window: WindowInfo
     let background: BackgroundStyle
@@ -18,7 +10,7 @@ struct RecordingConfiguration {
     let frameRate: Int
     let codec: VideoCodec
     let outputURL: URL
-    let windowScale: Double  // Scale factor for window size (0.2 to 1.0, where 1.0 is 100%)
+    let windowScale: Double
 
     enum Resolution: String, CaseIterable, Identifiable {
         case hd1080 = "1080p HD"
@@ -31,11 +23,11 @@ struct RecordingConfiguration {
         var dimensions: CGSize? {
             switch self {
             case .hd1080:
-                return CGSize(width: 1920, height: 1080)
+                return VideoConstants.Resolution.hd1080
             case .hd1440:
-                return CGSize(width: 2560, height: 1440)
+                return VideoConstants.Resolution.hd1440
             case .uhd4k:
-                return CGSize(width: 3840, height: 2160)
+                return VideoConstants.Resolution.uhd4k
             case .original:
                 return nil
             }
@@ -66,28 +58,21 @@ struct RecordingConfiguration {
         background: BackgroundStyle,
         webcam: WebcamConfiguration,
         resolution: Resolution = .original,
-        frameRate: Int = 60,
+        frameRate: Int = VideoConstants.FrameRate.cinematic,
         codec: VideoCodec = .h264,
         outputDirectory: URL? = nil,
         windowScale: Double = 1.0
     ) -> RecordingConfiguration {
-        // For sandboxed apps, we need to write to temp directory first
-        // Then move to user-selected location after recording
         let timestamp = ISO8601DateFormatter().string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
-        let filename = "Recording_\(timestamp).mov"
+        let filename = "\(StringConstants.Recording.fileNamePrefix)\(timestamp).\(StringConstants.Recording.fileExtension)"
 
         let baseDirectory: URL
         if let customDir = outputDirectory {
-            // User has selected a directory - we have security-scoped access
             baseDirectory = customDir
         } else {
-            // Use temporary directory for recording
-            // We'll prompt user to save after recording completes
             baseDirectory = FileManager.default.temporaryDirectory
-                .appendingPathComponent("EasyDemo", isDirectory: true)
-
-            // Create directory if it doesn't exist
+                .appendingPathComponent(StringConstants.Path.appFolder, isDirectory: true)
             try? FileManager.default.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
         }
 

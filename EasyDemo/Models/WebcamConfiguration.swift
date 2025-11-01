@@ -1,14 +1,6 @@
-//
-//  WebcamConfiguration.swift
-//  EasyDemo
-//
-//  Created by Daniel Oquelis on 28.10.25.
-//
-
 import Foundation
 import CoreGraphics
 
-/// Configuration for webcam overlay
 struct WebcamConfiguration: Codable {
     var isEnabled: Bool
     var shape: Shape
@@ -55,6 +47,6 @@ struct WebcamConfiguration: Codable {
         isEnabled: false,
         shape: .circle,
         position: .bottomRight,
-        size: 200
+        size: UIConstants.Size.webcamDefault
     )
 }

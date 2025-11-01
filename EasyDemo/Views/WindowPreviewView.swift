@@ -20,6 +20,7 @@ struct WindowPreviewView: View {
             ZStack {
                 // Background layer - contained and clipped
                 backgroundView
+                    .frame(width: geometry.size.width, height: geometry.size.height)
 
                 // Window preview layer
                 if let image = preview.previewImage {
@@ -138,40 +139,30 @@ struct WindowPreviewView: View {
 
     @ViewBuilder
     private var backgroundView: some View {
-        Group {
-            switch backgroundStyle {
-            case .solidColor(let color):
-                Rectangle()
-                    .fill(color)
-
-            case .gradient(let colors, let startPoint, let endPoint):
-                Rectangle()
-                    .fill(
-                        LinearGradient(
-                            colors: colors,
-                            startPoint: startPoint,
-                            endPoint: endPoint
-                        )
-                    )
-
-            case .blur:
-                Rectangle()
-                    .fill(Color.gray.opacity(0.3))
-
-            case .image(let url):
-                if let nsImage = NSImage(contentsOf: url),
-                   let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) {
-                    Image(decorative: cgImage, scale: 1.0)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } else {
+        GeometryReader { geo in
+            Group {
+                switch backgroundStyle {
+                case .solidColor(let color):
                     Rectangle()
-                        .fill(Color.gray)
+                        .fill(color)
+
+                case .gradient(let colors, let startPoint, let endPoint):
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: colors,
+                                startPoint: startPoint,
+                                endPoint: endPoint
+                            )
+                        )
+
+                case .image(let url):
+                    BackgroundImageView(url: url)
                 }
             }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipped()
     }
 }
 
@@ -232,4 +223,40 @@ struct WebcamOverlayView: View {
         backgroundStyle: .solidColor(.black),
         webcamConfig: nil
     )
+}
+
+/// Helper view to load background images with security-scoped resource handling
+struct BackgroundImageView: View {
+    let url: URL
+    @State private var loadedImage: CGImage?
+
+    var body: some View {
+        Group {
+            if let cgImage = loadedImage {
+                Image(decorative: cgImage, scale: 1.0)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                Rectangle()
+                    .fill(Color.gray)
+            }
+        }
+        .task {
+            loadImage()
+        }
+    }
+
+    private func loadImage() {
+        let didStartAccessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccessing {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        if let nsImage = NSImage(contentsOf: url),
+           let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+            loadedImage = cgImage
+        }
+    }
 }

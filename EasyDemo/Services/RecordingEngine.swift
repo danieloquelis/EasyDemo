@@ -39,6 +39,11 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
     // Webcam capture
     private var webcamCapture: WebcamCapture?
 
+    // Cache for webcam masks to avoid regenerating every frame
+    private var cachedMask: CIImage?
+    private var cachedMaskSize: CGSize = .zero
+    private var cachedMaskShape: WebcamConfiguration.Shape?
+
     /// Start recording with the given configuration
     func startRecording(configuration: RecordingConfiguration) async throws {
         guard !isRecording else { return }
@@ -473,11 +478,15 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
             }
             return CIImage(color: CIColor.black).cropped(to: rect)
 
-        case .blur:
-            // TODO: Implement wallpaper blur
-            return CIImage(color: CIColor.gray).cropped(to: rect)
-
         case .image(let url):
+            // Handle security-scoped resources
+            let didStartAccessing = url.startAccessingSecurityScopedResource()
+            defer {
+                if didStartAccessing {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+
             if let nsImage = NSImage(contentsOf: url),
                let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) {
                 let ciImage = CIImage(cgImage: cgImage)
@@ -563,23 +572,33 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
             // Use CICrop + CICircleSplashDistortion for simpler circular clipping
             // This is similar to how Loom/Screen Studio do it
             let maskRect = CGRect(origin: .zero, size: targetSize)
-            let radius = min(targetSize.width, targetSize.height) / 2
 
-            // Use Core Image's built-in circular cropping via alpha channel
-            // Create a circular alpha mask
-            let centerX = targetSize.width / 2
-            let centerY = targetSize.height / 2
+            // Check if we can reuse cached mask
+            let mask: CIImage?
+            if let cachedMask = cachedMask,
+               cachedMaskSize == targetSize,
+               cachedMaskShape == .circle {
+                mask = cachedMask
+            } else {
+                // Create new mask and cache it
+                let radius = min(targetSize.width, targetSize.height) / 2
+                let centerX = targetSize.width / 2
+                let centerY = targetSize.height / 2
 
-            // Use CIRadialGradient to create a simple circular mask
-            let maskGradient = CIFilter(name: "CIRadialGradient", parameters: [
-                "inputCenter": CIVector(x: centerX, y: centerY),
-                "inputRadius0": radius - 1,
-                "inputRadius1": radius,
-                "inputColor0": CIColor.white,
-                "inputColor1": CIColor.clear
-            ])?.outputImage?.cropped(to: maskRect)
+                mask = CIFilter(name: "CIRadialGradient", parameters: [
+                    "inputCenter": CIVector(x: centerX, y: centerY),
+                    "inputRadius0": radius - 1,
+                    "inputRadius1": radius,
+                    "inputColor0": CIColor.white,
+                    "inputColor1": CIColor.clear
+                ])?.outputImage?.cropped(to: maskRect)
 
-            if let mask = maskGradient {
+                cachedMask = mask
+                cachedMaskSize = targetSize
+                cachedMaskShape = .circle
+            }
+
+            if let mask = mask {
                 // Create the masked webcam by blending
                 let maskedImage = scaledWebcam
                     .cropped(to: maskRect)
@@ -589,9 +608,10 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
 
                 // Add shadow to webcam (like Loom/Screen Studio)
                 // Create shadow using CIGaussianBlur + offset
-                let shadowRadius = 30.0 * captureScaleFactor  // Stronger shadow radius
-                let shadowOffset = CGSize(width: 0, height: -15 * captureScaleFactor)  // More offset
-                let shadowOpacity: CGFloat = 0.7  // Darker shadow (70% opacity)
+                // Reduced shadow radius for better performance
+                let shadowRadius = 15.0 * captureScaleFactor  // Reduced from 30 for performance
+                let shadowOffset = CGSize(width: 0, height: -10 * captureScaleFactor)
+                let shadowOpacity: CGFloat = 0.6  // Slightly lighter shadow
 
                 // Create a black version of the mask for the shadow
                 let shadowMask = CIImage(color: CIColor.black).cropped(to: maskRect)
@@ -618,12 +638,21 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
             let maskRect = CGRect(origin: .zero, size: targetSize)
             let cornerRadius: CGFloat = 16 * captureScaleFactor
 
-            if frameCount <= 3 {
-                print("  - Creating rounded rectangle mask: size=\(targetSize), radius=\(cornerRadius)")
+            // Check if we can reuse cached mask
+            let mask: CIImage?
+            if let cachedMask = cachedMask,
+               cachedMaskSize == targetSize,
+               cachedMaskShape == .roundedRectangle {
+                mask = cachedMask
+            } else {
+                // Create new mask and cache it
+                mask = createRoundedRectangleMask(size: targetSize, cornerRadius: cornerRadius)
+                cachedMask = mask
+                cachedMaskSize = targetSize
+                cachedMaskShape = .roundedRectangle
             }
 
-            // Create mask using Core Graphics path
-            if let mask = createRoundedRectangleMask(size: targetSize, cornerRadius: cornerRadius) {
+            if let mask = mask {
                 if frameCount <= 3 {
                     print("  - Rounded rectangle mask created: extent=\(mask.extent)")
                 }
@@ -640,10 +669,10 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
                         "inputMaskImage": mask
                     ])
 
-                // Add shadow
-                let shadowRadius = 30.0 * captureScaleFactor
-                let shadowOffset = CGSize(width: 0, height: -15 * captureScaleFactor)
-                let shadowOpacity: CGFloat = 0.7
+                // Add shadow (optimized for performance)
+                let shadowRadius = 15.0 * captureScaleFactor  // Reduced from 30
+                let shadowOffset = CGSize(width: 0, height: -10 * captureScaleFactor)
+                let shadowOpacity: CGFloat = 0.6
 
                 let shadowMask = CIImage(color: CIColor.black).cropped(to: maskRect)
                     .applyingFilter("CIBlendWithAlphaMask", parameters: ["inputMaskImage": mask])
@@ -664,12 +693,21 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
             // Use same formula as SwiftUI preview: size * 0.22 for corner radius
             let cornerRadius: CGFloat = targetSize.width * 0.22
 
-            if frameCount <= 3 {
-                print("  - Creating squircle mask: size=\(targetSize), radius=\(cornerRadius)")
+            // Check if we can reuse cached mask
+            let mask: CIImage?
+            if let cachedMask = cachedMask,
+               cachedMaskSize == targetSize,
+               cachedMaskShape == .squircle {
+                mask = cachedMask
+            } else {
+                // Create new mask and cache it
+                mask = createSwiftUISquircleMask(size: targetSize, cornerRadius: cornerRadius)
+                cachedMask = mask
+                cachedMaskSize = targetSize
+                cachedMaskShape = .squircle
             }
 
-            // Create mask using SwiftUI rendering (same as preview)
-            if let mask = createSwiftUISquircleMask(size: targetSize, cornerRadius: cornerRadius) {
+            if let mask = mask {
                 if frameCount <= 3 {
                     print("  - Squircle mask created: extent=\(mask.extent)")
                 }
@@ -686,10 +724,10 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
                         "inputMaskImage": mask
                     ])
 
-                // Add shadow
-                let shadowRadius = 30.0 * captureScaleFactor
-                let shadowOffset = CGSize(width: 0, height: -15 * captureScaleFactor)
-                let shadowOpacity: CGFloat = 0.7
+                // Add shadow (optimized for performance)
+                let shadowRadius = 15.0 * captureScaleFactor  // Reduced from 30
+                let shadowOffset = CGSize(width: 0, height: -10 * captureScaleFactor)
+                let shadowOpacity: CGFloat = 0.6
 
                 let shadowMask = CIImage(color: CIColor.black).cropped(to: maskRect)
                     .applyingFilter("CIBlendWithAlphaMask", parameters: ["inputMaskImage": mask])

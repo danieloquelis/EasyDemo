@@ -11,7 +11,7 @@ import UniformTypeIdentifiers
 /// Main setup view orchestrating window selection, background choice, and preview
 struct SetupView: View {
     @State private var selectedWindow: WindowInfo?
-    @State private var selectedBackground: BackgroundStyle = .solidColor(.black)
+    @State private var selectedBackground: BackgroundStyle = .solidColor(Color(red: 1.0, green: 0.55, blue: 0.0))
     @State private var webcamConfig = WebcamConfiguration.default
     @State private var selectedResolution: RecordingConfiguration.Resolution = .original
     @State private var selectedCodec: RecordingConfiguration.VideoCodec = .h264

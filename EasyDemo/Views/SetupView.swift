@@ -13,6 +13,7 @@ struct SetupView: View {
     @State private var selectedWindow: WindowInfo?
     @State private var selectedBackground: BackgroundStyle = .solidColor(Color(red: 1.0, green: 0.55, blue: 0.0))
     @State private var webcamConfig = WebcamConfiguration.default
+    @State private var audioConfig = AudioConfiguration.default
     @State private var selectedResolution: RecordingConfiguration.Resolution = .original
     @State private var selectedCodec: RecordingConfiguration.VideoCodec = .h264
     @State private var frameRate: Int = 60
@@ -28,6 +29,7 @@ struct SetupView: View {
         case windowSize
         case background
         case webcam
+        case audio
         case advanced
         case output
     }
@@ -184,6 +186,39 @@ struct SetupView: View {
 
                 Section {
                     Button {
+                        expandedSection = expandedSection == .audio ? nil : .audio
+                    } label: {
+                        HStack {
+                            Label {
+                                Text("Audio Recording")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                            } icon: {
+                                Image(systemName: "waveform")
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: expandedSection == .audio ? "chevron.down" : "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(recordingEngine.isRecording)
+
+                    if expandedSection == .audio {
+                        AudioSettingsView(configuration: $audioConfig)
+                            .padding(.top, 8)
+                            .padding(.bottom, 8)
+                            .padding(.horizontal, 8)
+                            .background(Color(.controlBackgroundColor).opacity(0.5))
+                            .cornerRadius(8)
+                            .disabled(recordingEngine.isRecording)
+                    }
+                }
+
+                Section {
+                    Button {
                         expandedSection = expandedSection == .advanced ? nil : .advanced
                     } label: {
                         HStack {
@@ -308,6 +343,7 @@ struct SetupView: View {
                                     window: window,
                                     background: selectedBackground,
                                     webcam: webcamConfig,
+                                    audio: audioConfig,
                                     resolution: selectedResolution,
                                     frameRate: frameRate,
                                     codec: selectedCodec,

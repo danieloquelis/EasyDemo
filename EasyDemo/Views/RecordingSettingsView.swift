@@ -40,6 +40,8 @@ struct RecordingSettingsView: View {
                 Text(resolutionDetailedDescription(for: selectedResolution))
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(nil)
                     .padding(8)
                     .background(Color(.controlBackgroundColor))
                     .cornerRadius(6)
@@ -72,6 +74,8 @@ struct RecordingSettingsView: View {
                 Text(codecDetailedDescription(for: selectedCodec))
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(nil)
                     .padding(8)
                     .background(Color(.controlBackgroundColor))
                     .cornerRadius(6)
@@ -96,16 +100,20 @@ struct RecordingSettingsView: View {
                      : "Standard video quality, great for presentations. Smaller file sizes.")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(nil)
                     .padding(8)
                     .background(Color(.controlBackgroundColor))
                     .cornerRadius(6)
             }
 
             // Quality tip
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: 6) {
                 Image(systemName: "lightbulb.fill")
                     .foregroundColor(.yellow)
                     .font(.caption)
+                    .frame(width: 12, height: 12)
+                    .padding(.top, 2)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Pro Tip")
                         .font(.caption)
@@ -113,6 +121,8 @@ struct RecordingSettingsView: View {
                     Text(getQualityTip())
                         .font(.caption2)
                         .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(nil)
                 }
             }
             .padding(8)

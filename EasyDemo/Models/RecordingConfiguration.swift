@@ -6,6 +6,7 @@ struct RecordingConfiguration {
     let window: WindowInfo
     let background: BackgroundStyle
     let webcam: WebcamConfiguration
+    let audio: AudioConfiguration
     let resolution: Resolution
     let frameRate: Int
     let codec: VideoCodec
@@ -57,6 +58,7 @@ struct RecordingConfiguration {
         window: WindowInfo,
         background: BackgroundStyle,
         webcam: WebcamConfiguration,
+        audio: AudioConfiguration = .default,
         resolution: Resolution = .original,
         frameRate: Int = VideoConstants.FrameRate.cinematic,
         codec: VideoCodec = .h264,
@@ -82,6 +84,7 @@ struct RecordingConfiguration {
             window: window,
             background: background,
             webcam: webcam,
+            audio: audio,
             resolution: resolution,
             frameRate: frameRate,
             codec: codec,

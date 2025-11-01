@@ -13,17 +13,20 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
     private var stream: SCStream?
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
+    private var audioInput: AVAssetWriterInput?
     private var pixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
 
     private var configuration: RecordingConfiguration?
     private var startTime: CMTime?
     private var frameCount: Int64 = 0
+    private var audioSampleCount: Int64 = 0
     private var durationTimer: Timer?
     private var captureScaleFactor: CGFloat = 2.0
     private var targetOutputSize: CGSize = .zero
 
     private let videoComposer = VideoComposer()
     private var webcamCapture: WebcamCapture?
+    private var audioCapture: AudioCaptureService?
 
     func startRecording(configuration: RecordingConfiguration) async throws {
         guard !isRecording else { return }
@@ -31,6 +34,7 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         self.configuration = configuration
         self.isRecording = true
         self.frameCount = 0
+        self.audioSampleCount = 0
         self.startTime = nil
         self.recordingDuration = 0
 
@@ -42,9 +46,26 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         let filter = SCContentFilter(desktopIndependentWindow: scWindow)
         self.captureScaleFactor = CGFloat(filter.pointPixelScale)
 
+        // Setup asset writer - this starts the recording session and sets self.startTime
         try setupAssetWriter(configuration: configuration)
+
+        // Start audio capture with the same start time as the asset writer
+        if configuration.audio.isEnabled {
+            let audioService = AudioCaptureService()
+            try await audioService.startCapture(
+                configuration: configuration.audio,
+                sessionStartTime: self.startTime
+            ) { [weak self] sampleBuffer in
+                guard let self = self else { return }
+                self.processAudioSample(sampleBuffer)
+            }
+            self.audioCapture = audioService
+        }
+
+        // Start video stream
         try await setupStream(configuration: configuration, filter: filter)
 
+        // Start webcam if enabled
         if configuration.webcam.isEnabled {
             let webcam = WebcamCapture()
             try await webcam.startCapture()
@@ -70,12 +91,19 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         webcamCapture?.stopCapture()
         webcamCapture = nil
 
+        audioCapture?.stopCapture()
+        audioCapture = nil
+
         if let stream = stream {
             try? await stream.stopCapture()
         }
 
         if let videoInput = videoInput {
             videoInput.markAsFinished()
+        }
+
+        if let audioInput = audioInput {
+            audioInput.markAsFinished()
         }
 
         if let assetWriter = assetWriter {
@@ -102,6 +130,7 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         self.stream = nil
         self.assetWriter = nil
         self.videoInput = nil
+        self.audioInput = nil
         self.pixelBufferAdaptor = nil
         self.startTime = nil
         self.isRecording = false
@@ -147,14 +176,28 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         }
 
         writer.add(videoInput)
+
+        // Add audio input if audio is enabled
+        if configuration.audio.isEnabled {
+            let audioSettings = createAudioSettings(quality: configuration.audio.quality)
+            let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+            audioInput.expectsMediaDataInRealTime = true
+
+            if writer.canAdd(audioInput) {
+                writer.add(audioInput)
+                self.audioInput = audioInput
+            }
+        }
+
         self.assetWriter = writer
         self.videoInput = videoInput
         self.pixelBufferAdaptor = adaptor
 
         writer.startWriting()
-        let startTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 600)
-        writer.startSession(atSourceTime: startTime)
-        self.startTime = startTime
+        // Start session at time zero - samples will have timestamps relative to this
+        writer.startSession(atSourceTime: .zero)
+        // Store the actual wall clock time when we started for timestamp calculations
+        self.startTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 600)
     }
 
     private func calculateOutputSize(configuration: RecordingConfiguration) -> CGSize {
@@ -193,6 +236,25 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
                 AVVideoExpectedSourceFrameRateKey: frameRate,
                 AVVideoQualityKey: 0.9
             ]
+        ]
+    }
+
+    private func createAudioSettings(quality: AudioConfiguration.AudioQuality) -> [String: Any] {
+        // Create audio channel layout
+        var channelLayout = AudioChannelLayout()
+        channelLayout.mChannelLayoutTag = kAudioChannelLayoutTag_Stereo
+        channelLayout.mChannelBitmap = AudioChannelBitmap()
+        channelLayout.mNumberChannelDescriptions = 0
+
+        let channelLayoutData = Data(bytes: &channelLayout, count: MemoryLayout<AudioChannelLayout>.size)
+
+        // Important: Match the sample rate with incoming audio (48kHz)
+        return [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: 48000.0,  // Match input sample rate
+            AVNumberOfChannelsKey: 2,
+            AVChannelLayoutKey: channelLayoutData,
+            AVEncoderBitRateKey: quality.bitrate
         ]
     }
 
@@ -236,9 +298,31 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         )
 
         if let buffer = composedBuffer {
-            let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            // Convert timestamp to be relative to recording start time
+            let currentTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 600)
+            let presentationTime: CMTime
+
+            if let startTime = startTime {
+                presentationTime = CMTimeSubtract(currentTime, startTime)
+            } else {
+                presentationTime = .zero
+            }
+
             adaptor.append(buffer, withPresentationTime: presentationTime)
             frameCount += 1
+        }
+    }
+
+    nonisolated private func processAudioSample(_ sampleBuffer: CMSampleBuffer) {
+        Task { @MainActor in
+            guard let audioInput = self.audioInput,
+                  audioInput.isReadyForMoreMediaData else {
+                return
+            }
+
+            // Append the audio sample directly - timing is already handled in AudioCaptureService
+            audioInput.append(sampleBuffer)
+            self.audioSampleCount += 1
         }
     }
 

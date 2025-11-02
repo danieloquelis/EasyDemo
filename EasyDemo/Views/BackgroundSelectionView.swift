@@ -20,17 +20,20 @@ struct BackgroundSelectionView: View {
             Text("Choose Background")
                 .font(.headline)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: UIConstants.Padding.small) {
-                    solidColorOption
-                    gradientOption
-                    customImageOptions
-                    addImageButton
+            GeometryReader { geometry in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: UIConstants.Padding.small) {
+                        defaultImageOptions
+                        solidColorOption
+                        gradientOption
+                        customImageOptions
+                        addImageButton
+                    }
+                    .padding(.horizontal, UIConstants.Padding.compact)
+                    .padding(.vertical, UIConstants.Padding.compact)
                 }
-                .padding(.horizontal, UIConstants.Padding.compact)
-                .padding(.vertical, 2)
             }
-            .frame(height: 120)
+            .frame(height: 130)
         }
         .fileImporter(
             isPresented: $showImagePicker,
@@ -63,57 +66,79 @@ struct BackgroundSelectionView: View {
     }
 
     private var solidColorOption: some View {
-        SolidColorCard(color: solidColor, isSelected: isSolidColorSelected)
-            .onTapGesture {
+        Button {
+            if isSolidColorSelected {
+                showColorPicker = true
+            } else {
                 selectedBackground = .solidColor(solidColor)
             }
-            .overlay(alignment: .topTrailing) {
-                if isSolidColorSelected {
-                    editButton {
-                        showColorPicker = true
-                    }
-                }
-            }
+        } label: {
+            SolidColorCard(color: solidColor, isSelected: isSolidColorSelected)
+        }
+        .buttonStyle(.plain)
     }
 
     private var gradientOption: some View {
-        GradientCard(
-            color1: gradientColor1,
-            color2: gradientColor2,
-            startPoint: gradientStartPoint,
-            endPoint: gradientEndPoint,
-            isSelected: isGradientSelected
-        )
-        .onTapGesture {
-            selectedBackground = .gradient(
-                colors: [gradientColor1, gradientColor2],
+        Button {
+            if isGradientSelected {
+                showGradientEditor = true
+            } else {
+                selectedBackground = .gradient(
+                    colors: [gradientColor1, gradientColor2],
+                    startPoint: gradientStartPoint,
+                    endPoint: gradientEndPoint
+                )
+            }
+        } label: {
+            GradientCard(
+                color1: gradientColor1,
+                color2: gradientColor2,
                 startPoint: gradientStartPoint,
-                endPoint: gradientEndPoint
+                endPoint: gradientEndPoint,
+                isSelected: isGradientSelected
             )
         }
-        .overlay(alignment: .topTrailing) {
-            if isGradientSelected {
-                editButton {
-                    showGradientEditor = true
-                }
+        .buttonStyle(.plain)
+    }
+
+    private var defaultImageOptions: some View {
+        ForEach(imageManager.defaultImageURLs) { defaultImage in
+            Button {
+                selectedBackground = .image(defaultImage.url)
+            } label: {
+                DefaultImageCard(
+                    name: defaultImage.name,
+                    url: defaultImage.url,
+                    isSelected: isImageSelected(defaultImage.url)
+                )
             }
+            .buttonStyle(.plain)
         }
     }
 
     private var customImageOptions: some View {
         ForEach(imageManager.customImageURLs, id: \.self) { url in
-            CustomImageCard(url: url, isSelected: isImageSelected(url))
-                .onTapGesture {
-                    selectedBackground = .image(url)
-                }
-                .overlay(alignment: .topTrailing) {
-                    deleteButton {
-                        imageManager.removeCustomImage(url)
-                        if isImageSelected(url) {
-                            selectedBackground = .solidColor(solidColor)
+            Button {
+                selectedBackground = .image(url)
+            } label: {
+                CustomImageCard(url: url, isSelected: isImageSelected(url))
+                    .overlay(alignment: .topTrailing) {
+                        Button {
+                            imageManager.removeCustomImage(url)
+                            if isImageSelected(url) {
+                                selectedBackground = .solidColor(solidColor)
+                            }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 20))
+                                .foregroundStyle(.white, .red)
+                                .shadow(radius: 2)
                         }
+                        .buttonStyle(.plain)
+                        .padding(6)
                     }
-                }
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -139,28 +164,6 @@ struct BackgroundSelectionView: View {
             )
         }
         .buttonStyle(.plain)
-    }
-
-    private func editButton(action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: "pencil.circle.fill")
-                .font(.system(size: UIConstants.Padding.standard))
-                .foregroundColor(.white)
-                .background(Circle().fill(Color.accentColor))
-        }
-        .buttonStyle(.plain)
-        .padding(6)
-    }
-
-    private func deleteButton(action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: "xmark.circle.fill")
-                .font(.system(size: UIConstants.Padding.standard))
-                .foregroundColor(.white)
-                .background(Circle().fill(Color.red))
-        }
-        .buttonStyle(.plain)
-        .padding(6)
     }
 
     private var isSolidColorSelected: Bool {

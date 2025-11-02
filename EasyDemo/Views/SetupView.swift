@@ -11,7 +11,7 @@ import UniformTypeIdentifiers
 /// Main setup view orchestrating window selection, background choice, and preview
 struct SetupView: View {
     @State private var selectedWindow: WindowInfo?
-    @State private var selectedBackground: BackgroundStyle = .solidColor(Color(red: 1.0, green: 0.55, blue: 0.0))
+    @State private var selectedBackground: BackgroundStyle = BackgroundStyle.defaultBigSur
     @State private var webcamConfig = WebcamConfiguration.default
     @State private var audioConfig = AudioConfiguration.default
     @State private var selectedResolution: RecordingConfiguration.Resolution = .original
@@ -19,7 +19,7 @@ struct SetupView: View {
     @State private var frameRate: Int = 60
     @State private var windowScale: Double = 0.8  // 80% by default
     @State private var showingWindowSelector = true
-    @State private var expandedSection: SidebarSection? = nil
+    @State private var expandedSection: SidebarSection? = .background
     @State private var recordingResult: RecordingResult?
     @State private var outputDirectory: URL?
     @State private var showingFolderPicker = false

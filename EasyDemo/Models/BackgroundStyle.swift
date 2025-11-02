@@ -2,6 +2,12 @@ import Foundation
 import SwiftUI
 import Combine
 
+struct DefaultBackgroundImage: Identifiable, Hashable {
+    let id = UUID()
+    let name: String
+    let url: URL
+}
+
 enum BackgroundStyle: Hashable, Identifiable {
     case solidColor(Color)
     case gradient(colors: [Color], startPoint: UnitPoint, endPoint: UnitPoint)
@@ -36,17 +42,33 @@ enum BackgroundStyle: Hashable, Identifiable {
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
+
+    static var defaultBigSur: BackgroundStyle {
+        if let bigSurURL = Bundle.main.url(forResource: "custom-wallpaper", withExtension: "jpg") {
+            return .image(bigSurURL)
+        }
+        return defaultSolidColor
+    }
 }
 
 @MainActor
 class BackgroundImageManager: ObservableObject {
     @Published var customImageURLs: [URL] = []
+    @Published var defaultImageURLs: [DefaultBackgroundImage] = []
 
     private let userDefaultsKey = "customBackgroundImageBookmarks"
 
     init() {
+        loadDefaultImages()
         loadCustomImages()
         validateImagePaths()
+    }
+
+    private func loadDefaultImages() {
+        // Add Big Sur wallpaper from Resources
+        if let bigSurURL = Bundle.main.url(forResource: "custom-wallpaper", withExtension: "jpg") {
+            defaultImageURLs.append(DefaultBackgroundImage(name: "Big Sur", url: bigSurURL))
+        }
     }
 
     private func loadCustomImages() {

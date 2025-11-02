@@ -84,35 +84,11 @@ struct WebcamSettingsView: View {
                         .font(.subheadline)
                         .foregroundColor(.secondary)
 
-                    Slider(value: $configuration.size, in: 100...400, step: 10)
+                    Slider(value: $configuration.size, in: UIConstants.Size.webcamMin...UIConstants.Size.webcamMax, step: 10)
+                        .frame(height: 20)
                 }
-
-                // Webcam preview
-                if webcam.isCapturing, let currentFrame = webcam.currentFrame {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Preview")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-
-                        WebcamOverlayView(
-                            frame: currentFrame,
-                            shape: configuration.shape,
-                            size: 120
-                        )
-                        .frame(height: 140)
-                    }
-                } else if configuration.isEnabled {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Preview")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-
-                        ProgressView()
-                            .progressViewStyle(.circular)
-                            .scaleEffect(1.2)
-                            .frame(height: 140)
-                    }
-                }
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
             }
         }
         .onAppear {

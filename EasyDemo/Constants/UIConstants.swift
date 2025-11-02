@@ -20,8 +20,8 @@ enum UIConstants {
         static let iconMedium: CGFloat = 16
         static let iconLarge: CGFloat = 20
         static let webcamMin: CGFloat = 100
-        static let webcamMax: CGFloat = 400
-        static let webcamDefault: CGFloat = 200
+        static let webcamMax: CGFloat = 350
+        static let webcamDefault: CGFloat = 250
         static let cornerRadius: CGFloat = 12
         static let borderWidth: CGFloat = 2
     }

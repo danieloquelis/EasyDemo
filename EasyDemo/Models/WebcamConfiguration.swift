@@ -46,7 +46,7 @@ struct WebcamConfiguration: Codable {
     static let `default` = WebcamConfiguration(
         isEnabled: false,
         shape: .circle,
-        position: .bottomRight,
+        position: .bottomLeft,
         size: UIConstants.Size.webcamDefault
     )
 }

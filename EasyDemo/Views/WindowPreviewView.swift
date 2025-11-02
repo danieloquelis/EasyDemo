@@ -23,7 +23,7 @@ struct WindowPreviewView: View {
                 backgroundView
                     .frame(width: geometry.size.width, height: geometry.size.height)
 
-                // Window preview layer
+                // Window preview layer - centered by default ZStack alignment
                 if let image = preview.previewImage {
                     let imageSize = CGSize(width: image.width, height: image.height)
                     let scaledSize = calculatePreviewSize(
@@ -40,40 +40,6 @@ struct WindowPreviewView: View {
                             x: 0,
                             y: 10
                         )
-                        .overlay(alignment: .topLeading) {
-                            // Webcam overlay
-                            if let config = webcamConfig, config.isEnabled {
-                                if webcam.isCapturing, let webcamFrame = webcam.currentFrame {
-                                    let webcamPosition = calculateWebcamPosition(
-                                        config: config,
-                                        containerSize: geometry.size
-                                    )
-
-                                    WebcamOverlayView(
-                                        frame: webcamFrame,
-                                        shape: config.shape,
-                                        size: config.size * 0.5  // Scale down for preview
-                                    )
-                                    .offset(x: webcamPosition.x, y: webcamPosition.y)
-                                } else {
-                                    // Show placeholder when webcam is enabled but not yet capturing
-                                    let webcamPosition = calculateWebcamPosition(
-                                        config: config,
-                                        containerSize: geometry.size
-                                    )
-
-                                    Circle()
-                                        .fill(Color.gray.opacity(0.3))
-                                        .frame(width: config.size * 0.5, height: config.size * 0.5)
-                                        .overlay(
-                                            ProgressView()
-                                                .progressViewStyle(.circular)
-                                                .scaleEffect(0.6)
-                                        )
-                                        .offset(x: webcamPosition.x, y: webcamPosition.y)
-                                }
-                            }
-                        }
                 } else {
                     VStack(spacing: 16) {
                         ProgressView()
@@ -82,6 +48,43 @@ struct WindowPreviewView: View {
                         Text("Capturing preview...")
                             .font(.headline)
                             .foregroundColor(.secondary)
+                    }
+                }
+
+                // Webcam overlay - positioned absolutely relative to entire viewport (like recording engine)
+                if let config = webcamConfig, config.isEnabled {
+                    if webcam.isCapturing, let webcamFrame = webcam.currentFrame {
+                        let webcamPosition = calculateWebcamPositionAbsolute(
+                            config: config,
+                            viewportSize: geometry.size,
+                            webcamSize: config.size,
+                            padding: UIConstants.Padding.large
+                        )
+
+                        WebcamOverlayView(
+                            frame: webcamFrame,
+                            shape: config.shape,
+                            size: config.size
+                        )
+                        .position(x: webcamPosition.x, y: webcamPosition.y)
+                    } else {
+                        // Show placeholder when webcam is enabled but not yet capturing
+                        let webcamPosition = calculateWebcamPositionAbsolute(
+                            config: config,
+                            viewportSize: geometry.size,
+                            webcamSize: config.size,
+                            padding: UIConstants.Padding.large
+                        )
+
+                        Circle()
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(width: config.size, height: config.size)
+                            .overlay(
+                                ProgressView()
+                                    .progressViewStyle(.circular)
+                                    .scaleEffect(0.6)
+                            )
+                            .position(x: webcamPosition.x, y: webcamPosition.y)
                     }
                 }
             }
@@ -114,6 +117,15 @@ struct WindowPreviewView: View {
 
     /// Calculate appropriate preview size to maintain quality while showing background
     private func calculatePreviewSize(imageSize: CGSize, containerSize: CGSize) -> CGSize {
+        let scale = calculatePreviewScale(imageSize: imageSize, containerSize: containerSize)
+        return CGSize(
+            width: imageSize.width * scale,
+            height: imageSize.height * scale
+        )
+    }
+
+    /// Calculate the scale factor used for preview (used by both window and webcam)
+    private func calculatePreviewScale(imageSize: CGSize, containerSize: CGSize) -> CGFloat {
         let minMargin: CGFloat = 80  // Minimum margin to always show background
         let availableWidth = containerSize.width - (minMargin * 2)
         let availableHeight = containerSize.height - (minMargin * 2)
@@ -124,32 +136,31 @@ struct WindowPreviewView: View {
         let fitScale = min(widthScale, heightScale, 1.0)  // Never scale up beyond original size
 
         // Apply user-defined window scale (0.2 to 1.0)
-        let finalScale = fitScale * windowScale
-
-        return CGSize(
-            width: imageSize.width * finalScale,
-            height: imageSize.height * finalScale
-        )
+        return fitScale * windowScale
     }
 
-    /// Calculate webcam overlay offset based on configuration
-    /// Returns offset from top-leading corner for use with .offset()
-    private func calculateWebcamPosition(config: WebcamConfiguration, containerSize: CGSize) -> CGPoint {
-        let padding: CGFloat = 40
-        let size = config.size * 0.5  // Match the scaled size
+    /// Calculate webcam overlay absolute position based on configuration
+    /// Returns center position for use with .position() modifier
+    /// Positions relative to the entire viewport (matching RecordingEngine behavior)
+    private func calculateWebcamPositionAbsolute(
+        config: WebcamConfiguration,
+        viewportSize: CGSize,
+        webcamSize: CGFloat,
+        padding: CGFloat
+    ) -> CGPoint {
+        // Use the same offset calculation as WebcamConfiguration.Position.offset
+        // This gives us the top-left corner position
+        let topLeftPosition = config.position.offset(
+            in: viewportSize,
+            webcamSize: webcamSize,
+            padding: padding
+        )
 
-        switch config.position {
-        case .topLeft:
-            return CGPoint(x: padding, y: padding)
-        case .topRight:
-            return CGPoint(x: containerSize.width - padding - size, y: padding)
-        case .bottomLeft:
-            return CGPoint(x: padding, y: containerSize.height - padding - size)
-        case .bottomRight:
-            return CGPoint(x: containerSize.width - padding - size, y: containerSize.height - padding - size)
-        case .custom:
-            return CGPoint(x: (containerSize.width - size) / 2, y: (containerSize.height - size) / 2)
-        }
+        // Convert from top-left to center position (for .position() modifier)
+        return CGPoint(
+            x: topLeftPosition.x + webcamSize / 2,
+            y: topLeftPosition.y + webcamSize / 2
+        )
     }
 
     @ViewBuilder

@@ -103,6 +103,7 @@ struct SetupView: View {
                         Slider(value: $windowScale, in: 0.2...1.0, step: 0.05)
                             .tint(.accentColor)
                             .disabled(recordingEngine.isRecording)
+                            .frame(height: 20)
 
                         HStack {
                             Text("20%")
@@ -114,6 +115,8 @@ struct SetupView: View {
                                 .foregroundColor(.secondary)
                         }
                     }
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
                     .padding(.vertical, 4)
                 }
 

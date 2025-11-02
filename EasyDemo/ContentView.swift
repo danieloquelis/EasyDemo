@@ -8,8 +8,20 @@
 import SwiftUI
 
 struct ContentView: View {
+    // MARK: - Properties
+
+    @StateObject private var onboardingManager = OnboardingManager.shared
+
+    // MARK: - Body
+
     var body: some View {
-        SetupView()
+        Group {
+            if onboardingManager.hasCompletedOnboarding {
+                SetupView()
+            } else {
+                OnboardingView()
+            }
+        }
     }
 }
 

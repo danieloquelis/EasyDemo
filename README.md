@@ -1,10 +1,8 @@
-![EasyDemo Cover](assets/EasyDemoCover.png)
-
 # EasyDemo - Screen Recorder
 
 A free, open-source screen recorder for macOS. Professional-quality recordings shouldn't be behind a paywall. For those who want a quick styled screen recording.
 
-<img width="1280" height="800" alt="EasyDemo Appstore Preview" src="https://github.com/user-attachments/assets/61871e78-2fcd-476e-b2d2-e811811433d8" />
+![EasyDemo Preview](assets/AppPreview.png)
 
 ## Description
 

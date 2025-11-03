@@ -175,7 +175,8 @@ struct WindowRowView: View {
                 .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
         )
         .task {
-            thumbnail = await windowCapture.captureThumbnail(for: window)
+            // Defer thumbnail capture to avoid triggering screen access consent before recording
+            thumbnail = nil
         }
     }
 }

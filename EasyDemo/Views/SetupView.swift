@@ -17,7 +17,7 @@ struct SetupView: View {
     @State private var selectedResolution: RecordingConfiguration.Resolution = .original
     @State private var selectedCodec: RecordingConfiguration.VideoCodec = .h264
     @State private var frameRate: Int = 60
-    @State private var windowScale: Double = 0.8  // 80% by default
+    @State private var windowScale: Double = 0.9  // 90% by default
     @State private var showingWindowSelector = true
     @State private var expandedSection: SidebarSection? = .background
     @State private var recordingResult: RecordingResult?

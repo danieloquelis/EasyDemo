@@ -2,7 +2,7 @@
 //  PermissionManager.swift
 //  EasyDemo
 //
-//  Created by Claude Code on 02.11.25.
+//  Created by Daniel Oquelis on 02.11.25.
 //
 
 import Foundation
@@ -73,6 +73,24 @@ class PermissionManager: ObservableObject {
         }
     }
 
+    // MARK: - Persistence
+
+    private let screenRecordingAttemptedKey = "screenRecordingPermissionAttempted"
+
+    private var hasAttemptedScreenRecordingRequest: Bool {
+        get { UserDefaults.standard.bool(forKey: screenRecordingAttemptedKey) }
+        set { UserDefaults.standard.set(newValue, forKey: screenRecordingAttemptedKey) }
+    }
+
+    /// Mark that the user has attempted to grant Screen Recording this session and returned
+    func markScreenRecordingAttempted() {
+        hasAttemptedScreenRecordingRequest = true
+    }
+
+    // Session guards to prevent repeated system prompts
+    private var isScreenRecordingRequestInFlight = false
+    private var hasRequestedScreenRecordingThisSession = false
+
     // MARK: - Check All Permissions
 
     func checkAllPermissions() async {
@@ -87,10 +105,15 @@ class PermissionManager: ObservableObject {
     func checkScreenRecordingPermission() async {
         // Use CGPreflightScreenCaptureAccess to check without triggering dialog
         let hasPermission = CGPreflightScreenCaptureAccess()
-        screenRecordingStatus = hasPermission ? .authorized : .notDetermined
+        if hasPermission {
+            screenRecordingStatus = .authorized
+        } else {
+            // If we've previously asked and still don't have permission, treat as denied
+            screenRecordingStatus = hasAttemptedScreenRecordingRequest ? .denied : .notDetermined
+        }
     }
 
-    /// Request screen recording permission (triggers system dialog)
+    /// Request screen recording permission
     func requestScreenRecordingPermission() async -> Bool {
         // First check current status
         await checkScreenRecordingPermission()
@@ -99,11 +122,22 @@ class PermissionManager: ObservableObject {
             return true
         }
 
-        // Trigger the system dialog by requesting access
-        let granted = CGRequestScreenCaptureAccess()
+        // Prevent multiple prompts in one session or concurrent requests
+        if isScreenRecordingRequestInFlight || hasRequestedScreenRecordingThisSession {
+            await checkScreenRecordingPermission()
+            return screenRecordingStatus.isGranted
+        }
+
+        isScreenRecordingRequestInFlight = true
+        hasRequestedScreenRecordingThisSession = true
+
+        // Trigger the native system dialog
+        let _ = CGRequestScreenCaptureAccess()
 
         // Update status after request
         await checkScreenRecordingPermission()
+
+        isScreenRecordingRequestInFlight = false
 
         return screenRecordingStatus.isGranted
     }
@@ -211,9 +245,15 @@ class PermissionManager: ObservableObject {
         alert.addButton(withTitle: "Cancel")
 
         if alert.runModal() == .alertFirstButtonReturn {
-            if let url = URL(string: type.settingsURL) {
-                NSWorkspace.shared.open(url)
-            }
+            openSystemSettings(for: type)
+        }
+    }
+
+    // MARK: - Public helpers
+
+    func openSystemSettings(for type: PermissionType) {
+        if let url = URL(string: type.settingsURL) {
+            NSWorkspace.shared.open(url)
         }
     }
 }

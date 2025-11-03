@@ -24,49 +24,23 @@ class WindowCapture: ObservableObject {
         }
     }
 
-    /// Check if screen recording permission is granted
+    /// Check if screen recording permission is granted (preflight only, no prompt)
     func checkScreenRecordingPermission() async {
         isCheckingPermission = true
-        do {
-            // Attempt to get shareable content to check permission
-            _ = try await SCShareableContent.current
-            hasScreenRecordingPermission = true
-        } catch {
-            hasScreenRecordingPermission = false
-        }
+        let granted = CGPreflightScreenCaptureAccess()
+        hasScreenRecordingPermission = granted
         isCheckingPermission = false
     }
 
-    /// Request screen recording permission from the user
+    /// Request screen recording permission from the user (delegates to PermissionManager)
     func requestScreenRecordingPermission() async {
-        // Trigger permission dialog by attempting to get shareable content
-        await checkScreenRecordingPermission()
-
-        // If permission denied, guide user to System Settings
-        if !hasScreenRecordingPermission {
-            let alert = NSAlert()
-            alert.messageText = "Screen Recording Permission Required"
-            alert.informativeText = """
-            Please grant Screen Recording permission in System Settings > Privacy & Security > Screen Recording.
-            """
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: "Open System Settings")
-            alert.addButton(withTitle: "Cancel")
-
-            if alert.runModal() == .alertFirstButtonReturn {
-                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
-                    NSWorkspace.shared.open(url)
-                }
-            }
-        }
+        let granted = await PermissionManager.shared.requestScreenRecordingPermission()
+        hasScreenRecordingPermission = granted
     }
 
     /// Enumerate all visible windows on screen
     func enumerateWindows() async {
-        guard hasScreenRecordingPermission else {
-            await requestScreenRecordingPermission()
-            return
-        }
+        guard hasScreenRecordingPermission else { return }
 
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(

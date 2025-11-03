@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 // MARK: - Onboarding Page Protocol
 
@@ -90,6 +91,7 @@ struct PermissionsPage: View, OnboardingPageContent {
     @Binding var permissionGranted: Bool
     @StateObject private var permissionManager = PermissionManager.shared
     @State private var isRequesting = false
+    @State private var didTriggerScreenRecordingRequest = false
 
     init(icon: String, title: String, description: String, pageNumber: Int = 1, permissionGranted: Binding<Bool>) {
         self.icon = icon
@@ -127,6 +129,9 @@ struct PermissionsPage: View, OnboardingPageContent {
             .onAppear {
                 checkPermissionStatus()
             }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                onAppActivated()
+            }
 
             VStack(spacing: UIConstants.Onboarding.sectionSpacing) {
                 Text(title)
@@ -149,7 +154,7 @@ struct PermissionsPage: View, OnboardingPageContent {
                             .font(.system(size: UIConstants.Typography.permissionsDescriptionSize + 2))
                     }
 
-                    Text(permissionGranted ? "Permission Granted" : "Grant Permission")
+                    Text(buttonTitle)
                         .font(.system(size: UIConstants.Typography.buttonTextSize, weight: .semibold))
                 }
                 .foregroundColor(permissionGranted ? .green : .white)
@@ -183,6 +188,12 @@ struct PermissionsPage: View, OnboardingPageContent {
         .padding(UIConstants.Padding.large)
     }
 
+    private var buttonTitle: String {
+        if permissionGranted { return "Permission Granted" }
+        if pageNumber == 1 && permissionManager.screenRecordingStatus == .denied { return "Open System Settings" }
+        return "Grant Permission"
+    }
+
     private func checkPermissionStatus() {
         Task {
             var granted = false
@@ -209,6 +220,49 @@ struct PermissionsPage: View, OnboardingPageContent {
         }
     }
 
+    private func onAppActivated() {
+        Task {
+            switch pageNumber {
+            case 1: // Screen Recording special handling
+                await permissionManager.checkScreenRecordingPermission()
+
+                if permissionManager.screenRecordingStatus.isGranted {
+                    await MainActor.run {
+                        withAnimation(.spring()) {
+                            permissionGranted = true
+                        }
+                    }
+                } else if didTriggerScreenRecordingRequest {
+                    // User returned without granting; mark as attempted so UI offers Settings
+                    permissionManager.markScreenRecordingAttempted()
+                    // Re-evaluate status after marking
+                    await permissionManager.checkScreenRecordingPermission()
+                    await MainActor.run {
+                        withAnimation(.spring()) {
+                            permissionGranted = false
+                        }
+                    }
+                }
+            case 2:
+                permissionManager.checkCameraPermission()
+                await MainActor.run {
+                    withAnimation(.spring()) {
+                        permissionGranted = permissionManager.cameraStatus.isGranted
+                    }
+                }
+            case 3:
+                permissionManager.checkMicrophonePermission()
+                await MainActor.run {
+                    withAnimation(.spring()) {
+                        permissionGranted = permissionManager.microphoneStatus.isGranted
+                    }
+                }
+            default:
+                break
+            }
+        }
+    }
+
     private func requestPermission() {
         // Prevent multiple simultaneous requests
         guard !isRequesting else { return }
@@ -219,7 +273,13 @@ struct PermissionsPage: View, OnboardingPageContent {
 
             switch pageNumber {
             case 1: // Screen Recording
-                granted = await permissionManager.requestScreenRecordingPermission()
+                if permissionManager.screenRecordingStatus == .denied {
+                    permissionManager.openSystemSettings(for: .screenRecording)
+                    // Do not change granted here; user must enable in Settings
+                } else {
+                    didTriggerScreenRecordingRequest = true
+                    granted = await permissionManager.requestScreenRecordingPermission()
+                }
             case 2: // Camera
                 granted = await permissionManager.requestCameraPermission()
             case 3: // Microphone

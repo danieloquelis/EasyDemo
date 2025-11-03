@@ -8,13 +8,13 @@
 import SwiftUI
 import AVKit
 import UniformTypeIdentifiers
+import AppKit
 
 /// View shown after recording is completed
 struct RecordingCompletedView: View {
     let result: RecordingResult
     @Environment(\.dismiss) private var dismiss
     @State private var player: AVPlayer?
-    @State private var showingSavePanel = false
     @State private var savedLocation: URL?
 
     var body: some View {
@@ -115,7 +115,7 @@ struct RecordingCompletedView: View {
                 .buttonStyle(.bordered)
 
                 Button {
-                    showingSavePanel = true
+                    saveAs()
                 } label: {
                     Label("Save As...", systemImage: "square.and.arrow.down")
                 }
@@ -149,17 +149,25 @@ struct RecordingCompletedView: View {
             player?.pause()
             player = nil
         }
-        .fileExporter(
-            isPresented: $showingSavePanel,
-            document: VideoDocument(url: result.fileURL),
-            contentType: .movie,
-            defaultFilename: result.fileURL.lastPathComponent
-        ) { result in
-            switch result {
-            case .success(let url):
-                savedLocation = url
-            case .failure(let error):
-                print("Failed to save: \(error)")
+    }
+}
+
+private extension RecordingCompletedView {
+    func saveAs() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.movie]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = result.fileURL.lastPathComponent
+
+        if panel.runModal() == .OK, let destinationURL = panel.url {
+            do {
+                if FileManager.default.fileExists(atPath: destinationURL.path) {
+                    try FileManager.default.removeItem(at: destinationURL)
+                }
+                try FileManager.default.copyItem(at: result.fileURL, to: destinationURL)
+                savedLocation = destinationURL
+            } catch {
+                NSLog("Failed to save: \(error.localizedDescription)")
             }
         }
     }

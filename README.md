@@ -4,6 +4,8 @@
 
 A free, open-source screen recorder for macOS. Professional-quality recordings shouldn't be behind a paywall. For those who want a quick styled screen recording.
 
+<img width="1280" height="800" alt="EasyDemo Appstore Preview" src="https://github.com/user-attachments/assets/61871e78-2fcd-476e-b2d2-e811811433d8" />
+
 ## Description
 
 **EasyDemo** is a macOS-native screen recording application built with Swift and SwiftUI that captures selected windows with custom backgrounds and webcam overlays, producing high-quality local recordings similar to Screen Studio or Loom—but completely free.

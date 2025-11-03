@@ -12,28 +12,19 @@ platform :mac do
       key_content: ENV["APP_STORE_CONNECT_API_KEY"]
     )
 
-    # Update version and build
-    version = ENV["VERSION_NUMBER"]
+    # Get version and build numbers
+    version = ENV["VERSION_NUMBER"] || "1.0.0"
     build = ENV["BUILD_NUMBER"] || Time.now.to_i.to_s
-
-    increment_version_number(
-      version_number: version,
-      xcodeproj: "EasyDemo.xcodeproj"
-    ) if version
-
-    increment_build_number(
-      build_number: build,
-      xcodeproj: "EasyDemo.xcodeproj"
-    )
 
     # Build and package for Mac App Store / TestFlight
     # Note: macOS apps require a .pkg for TestFlight upload
+    # Pass version/build as xcodebuild args instead of using agvtool
     build_mac_app(
       scheme: "EasyDemo",
       export_method: "app-store",
       output_directory: "build",
       skip_package_pkg: false,
-      xcargs: "CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Distribution' DEVELOPMENT_TEAM=L329D2LS9J PROVISIONING_PROFILE_SPECIFIER='EasyDemo Mac App Store'",
+      xcargs: "CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Distribution' DEVELOPMENT_TEAM=L329D2LS9J PROVISIONING_PROFILE_SPECIFIER='EasyDemo Mac App Store' MARKETING_VERSION=#{version} CURRENT_PROJECT_VERSION=#{build}",
       export_options: {
         method: "app-store",
         teamID: "L329D2LS9J",

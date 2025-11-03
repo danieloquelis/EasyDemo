@@ -369,6 +369,9 @@ struct SetupView: View {
                 }
             }
         }
+        .safeAreaInset(edge: .top) {
+            Color.clear.frame(height: 0)
+        }
         .navigationTitle("Setup")
         .sheet(isPresented: $showingWindowSelector) {
             WindowSelectorSheet(selectedWindow: $selectedWindow)

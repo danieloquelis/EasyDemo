@@ -376,12 +376,8 @@ struct SetupView: View {
         .sheet(isPresented: $showingWindowSelector) {
             WindowSelectorSheet(selectedWindow: $selectedWindow)
         }
-        .sheet(item: Binding(
-            get: { recordingResult },
-            set: { recordingResult = $0 }
-        )) { result in
+        .sheet(item: $recordingResult) { result in
             RecordingCompletedView(result: result)
-                .frame(minHeight: 600)
         }
         .fileImporter(
             isPresented: $showingFolderPicker,

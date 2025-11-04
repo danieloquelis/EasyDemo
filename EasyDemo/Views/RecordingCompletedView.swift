@@ -14,8 +14,15 @@ import AppKit
 struct RecordingCompletedView: View {
     let result: RecordingResult
     @Environment(\.dismiss) private var dismiss
-    @State private var player: AVPlayer?
     @State private var savedLocation: URL?
+
+    // Initialize player immediately, not in onAppear
+    private var player: AVPlayer
+
+    init(result: RecordingResult) {
+        self.result = result
+        self.player = AVPlayer(url: result.fileURL)
+    }
 
     var body: some View {
         VStack(spacing: 24) {
@@ -54,21 +61,12 @@ struct RecordingCompletedView: View {
             }
 
             // Video preview
-            if let player = player {
-                VideoPlayer(player: player)
-                    .frame(height: 400)
-                    .cornerRadius(12)
-                    .onAppear {
-                        player.play()
-                    }
-            } else {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.gray.opacity(0.2))
-                    .frame(height: 400)
-                    .overlay(
-                        ProgressView()
-                    )
-            }
+            VideoPlayer(player: player)
+                .frame(height: 400)
+                .cornerRadius(12)
+                .onAppear {
+                    player.play()
+                }
 
             // Info
             HStack(spacing: 40) {
@@ -142,12 +140,8 @@ struct RecordingCompletedView: View {
         }
         .padding(24)
         .frame(width: 700, height: 650)
-        .onAppear {
-            player = AVPlayer(url: result.fileURL)
-        }
         .onDisappear {
-            player?.pause()
-            player = nil
+            player.pause()
         }
     }
 }

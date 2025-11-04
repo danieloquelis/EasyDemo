@@ -21,7 +21,6 @@ struct SetupView: View {
     @State private var showingWindowSelector = true
     @State private var expandedSection: SidebarSection? = .background
     @State private var recordingResult: RecordingResult?
-    @State private var showingRecordingComplete = false
     @State private var outputDirectory: URL?
     @State private var showingFolderPicker = false
     @StateObject private var recordingEngine = RecordingEngine()
@@ -333,10 +332,7 @@ struct SetupView: View {
                             Button {
                                 Task {
                                     let result = await recordingEngine.stopRecording()
-                                    if let result = result {
-                                        recordingResult = result
-                                        showingRecordingComplete = true
-                                    }
+                                    recordingResult = result
                                 }
                             } label: {
                                 Label("Stop Recording", systemImage: "stop.circle.fill")
@@ -380,10 +376,12 @@ struct SetupView: View {
         .sheet(isPresented: $showingWindowSelector) {
             WindowSelectorSheet(selectedWindow: $selectedWindow)
         }
-        .sheet(isPresented: $showingRecordingComplete) {
-            if let result = recordingResult {
-                RecordingCompletedView(result: result)
-            }
+        .sheet(item: Binding(
+            get: { recordingResult },
+            set: { recordingResult = $0 }
+        )) { result in
+            RecordingCompletedView(result: result)
+                .frame(minHeight: 600)
         }
         .fileImporter(
             isPresented: $showingFolderPicker,

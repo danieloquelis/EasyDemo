@@ -141,7 +141,7 @@ struct RecordingCompletedView: View {
             }
         }
         .padding(24)
-        .frame(width: 700)
+        .frame(width: 700, height: 650)
         .onAppear {
             player = AVPlayer(url: result.fileURL)
         }

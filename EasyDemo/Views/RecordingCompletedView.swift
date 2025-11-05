@@ -15,13 +15,12 @@ struct RecordingCompletedView: View {
     let result: RecordingResult
     @Environment(\.dismiss) private var dismiss
     @State private var savedLocation: URL?
-
-    // Initialize player immediately, not in onAppear
-    private var player: AVPlayer
+    @State private var player: AVPlayer
 
     init(result: RecordingResult) {
         self.result = result
-        self.player = AVPlayer(url: result.fileURL)
+        // Properly initialize @State wrapped AVPlayer
+        _player = State(initialValue: AVPlayer(url: result.fileURL))
     }
 
     var body: some View {
@@ -60,8 +59,8 @@ struct RecordingCompletedView: View {
                 .buttonStyle(.plain)
             }
 
-            // Video preview
-            VideoPlayer(player: player)
+            // Video preview - using AppKit AVPlayerView to avoid _AVKit_SwiftUI crash
+            CustomVideoPlayer(player: player)
                 .frame(height: 400)
                 .cornerRadius(12)
                 .onAppear {
@@ -164,6 +163,23 @@ private extension RecordingCompletedView {
                 NSLog("Failed to save: \(error.localizedDescription)")
             }
         }
+    }
+}
+
+/// Custom video player using AppKit's AVPlayerView to avoid _AVKit_SwiftUI framework crash
+struct CustomVideoPlayer: NSViewRepresentable {
+    let player: AVPlayer
+
+    func makeNSView(context: Context) -> AVPlayerView {
+        let view = AVPlayerView()
+        view.player = player
+        view.controlsStyle = .floating
+        view.showsFullScreenToggleButton = true
+        return view
+    }
+
+    func updateNSView(_ nsView: AVPlayerView, context: Context) {
+        nsView.player = player
     }
 }
 

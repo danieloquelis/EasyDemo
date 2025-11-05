@@ -21,9 +21,43 @@ class WebcamCapture: NSObject, ObservableObject {
     private var videoOutput: AVCaptureVideoDataOutput?
     private let captureQueue = DispatchQueue(label: "com.easydemo.webcam", qos: .userInteractive)
 
+    // Global registry to track all active webcam instances
+    private static var activeInstances: [WeakRef] = []
+
+    private class WeakRef {
+        weak var instance: WebcamCapture?
+        init(_ instance: WebcamCapture) {
+            self.instance = instance
+        }
+    }
+
     override init() {
         super.init()
         checkCameraPermission()
+        // Register this instance
+        WebcamCapture.activeInstances.append(WeakRef(self))
+    }
+
+    deinit {
+        // Ensure webcam is stopped when the object is deallocated
+        // Note: deinit cannot be async, so we stop the session directly
+        captureSession?.stopRunning()
+        captureSession = nil
+        videoOutput = nil
+    }
+
+    /// Stop all active webcam captures (called on app termination)
+    static func stopAllCaptures() {
+        // Clean up nil references
+        activeInstances.removeAll { $0.instance == nil }
+
+        // Stop all active instances
+        for ref in activeInstances {
+            if let instance = ref.instance, instance.isCapturing {
+                instance.captureSession?.stopRunning()
+                instance.isCapturing = false
+            }
+        }
     }
 
     /// Check camera permission status

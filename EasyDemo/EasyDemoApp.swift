@@ -6,9 +6,12 @@
 //
 
 import SwiftUI
+import AVFoundation
 
 @main
 struct EasyDemoApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     // MARK: - Constants
 
     private let githubURL = "https://github.com/danieloquelis/EasyDemo"
@@ -47,5 +50,24 @@ struct EasyDemoApp: App {
                 Link("View Source on GitHub", destination: url)
             }
         }
+    }
+}
+
+// MARK: - AppDelegate
+
+class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillTerminate(_ notification: Notification) {
+        // Stop all active webcam captures when app terminates
+        // This ensures the camera indicator light turns off immediately
+        Task { @MainActor in
+            WebcamCapture.stopAllCaptures()
+        }
+
+        // Give the system a brief moment to release resources
+        Thread.sleep(forTimeInterval: 0.15)
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return true
     }
 }

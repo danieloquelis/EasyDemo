@@ -116,7 +116,7 @@ Since the app does not collect personal data, most data protection regulations d
 For questions about this Privacy Policy or EasyDemo's privacy practices, please contact:
 
 **Developer**: Daniel Oquelis
-**Email**: [Your contact email]
+**Email**: daniel.oquelis@gmail.com
 **Copyright**: © 2025 Daniel Oquelis
 
 ## Transparency

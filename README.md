@@ -1,4 +1,7 @@
 # EasyDemo - Screen Recorder
+![Release](https://badgen.net/github/release/danieloquelis/EasyDemo?label=Release)
+![Build Status](https://github.com/danieloquelis/EasyDemo/actions/workflows/build.yml/badge.svg)
+[![App Store](https://img.shields.io/badge/App%20Store-Download-blue?logo=apple&logoColor=white)](https://apps.apple.com/de/app/easydemo-screen-recorder/id6754762371?l=en-GB)
 
 A free, open-source screen recorder for macOS. Professional-quality recordings shouldn't be behind a paywall. For those who want a quick styled screen recording.
 
@@ -11,6 +14,10 @@ A free, open-source screen recorder for macOS. Professional-quality recordings s
 Born from the frustration of screen recorders being locked behind paywalls, EasyDemo provides creators, developers, and everyone a styled and quick way to record their screen without subscription fees or usage limits.
 
 The app is designed with an **offline-first** philosophy—everything is processed locally using Apple frameworks (ScreenCaptureKit, AVFoundation, Core Image). No data leaves your device, ensuring complete privacy and security.
+
+You can download it from the AppStore:
+
+[![Download on the App Store](https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg)](https://apps.apple.com/de/app/easydemo-screen-recorder/id6754762371?l=en-GB&mt=12)
 
 ### Core Principles
 

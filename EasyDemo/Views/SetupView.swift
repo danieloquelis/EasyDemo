@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+import AppKit
 
 /// Main setup view orchestrating window selection, background choice, and preview
 struct SetupView: View {
@@ -23,6 +24,7 @@ struct SetupView: View {
     @State private var recordingResult: RecordingResult?
     @State private var outputDirectory: URL?
     @State private var showingFolderPicker = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @StateObject private var recordingEngine = RecordingEngine()
 
     enum SidebarSection: Hashable {
@@ -35,10 +37,11 @@ struct SetupView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             // Sidebar with setup options
             setupSidebar
                 .navigationSplitViewColumnWidth(min: 300, ideal: 350, max: 400)
+                .toolbar(removing: .sidebarToggle)
         } detail: {
             // Main preview area
             if let window = selectedWindow {
@@ -50,11 +53,24 @@ struct SetupView: View {
                 )
                 .id(window.id)  // Force recreation when window changes
                 .navigationTitle("Preview")
+                .toolbar(removing: .sidebarToggle)
             } else {
                 emptyPreviewState
+                    .toolbar(removing: .sidebarToggle)
             }
         }
+        .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 900, minHeight: 600)
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    toggleSidebar()
+                } label: {
+                    Image(systemName: "sidebar.leading")
+                }
+                .help("Toggle Sidebar")
+            }
+        }
     }
 
     @ViewBuilder
@@ -416,6 +432,16 @@ struct SetupView: View {
         let minutes = Int(duration) / 60
         let seconds = Int(duration) % 60
         return String(format: "%02d:%02d", minutes, seconds)
+    }
+    
+    private func toggleSidebar() {
+        withAnimation {
+            if columnVisibility == .all {
+                columnVisibility = .detailOnly
+            } else {
+                columnVisibility = .all
+            }
+        }
     }
 }
 

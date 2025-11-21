@@ -27,16 +27,23 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
     private let videoComposer = VideoComposer()
     private var webcamCapture: WebcamCapture?
     private var audioCapture: AudioCaptureService?
+    private var outputDirectoryManager: OutputDirectoryManager?
 
-    func startRecording(configuration: RecordingConfiguration) async throws {
+    func startRecording(configuration: RecordingConfiguration, outputDirectoryManager: OutputDirectoryManager? = nil) async throws {
         guard !isRecording else { return }
 
         self.configuration = configuration
+        self.outputDirectoryManager = outputDirectoryManager
         self.isRecording = true
         self.frameCount = 0
         self.audioSampleCount = 0
         self.startTime = nil
         self.recordingDuration = 0
+        
+        // Start accessing security-scoped resource if using custom output directory
+        if let manager = outputDirectoryManager, manager.customOutputDirectory != nil {
+            _ = manager.startAccessing()
+        }
 
         let content = try await SCShareableContent.current
         guard let scWindow = content.windows.first(where: { $0.windowID == configuration.window.id }) else {
@@ -127,6 +134,9 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
     }
 
     private func cleanup() {
+        // Stop accessing security-scoped resource
+        outputDirectoryManager?.stopAccessing()
+        
         self.stream = nil
         self.assetWriter = nil
         self.videoInput = nil
@@ -134,6 +144,7 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         self.pixelBufferAdaptor = nil
         self.startTime = nil
         self.isRecording = false
+        self.outputDirectoryManager = nil
     }
 
     private func getFileSize(at url: URL) -> Int64 {

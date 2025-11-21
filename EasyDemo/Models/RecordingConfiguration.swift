@@ -72,6 +72,8 @@ struct RecordingConfiguration {
         let baseDirectory: URL
         if let customDir = outputDirectory {
             baseDirectory = customDir
+            // Ensure the custom directory exists
+            try? FileManager.default.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
         } else {
             baseDirectory = FileManager.default.temporaryDirectory
                 .appendingPathComponent(StringConstants.Path.appFolder, isDirectory: true)

@@ -125,31 +125,68 @@ class AudioCaptureService: NSObject, ObservableObject {
     // MARK: - Microphone Capture
 
     private func startMicrophoneCapture(volume: Float, quality: AudioConfiguration.AudioQuality) throws {
-        // Set the audio device BEFORE creating audio engine if a specific device is selected
+        let audioEngine = AVAudioEngine()
+        
+        // Set the audio device BEFORE accessing the input node if a specific device is selected
         if let selectedDevice = selectedMicrophoneDevice {
-            var deviceID = selectedDevice.uniqueID as CFString
-            var propertyAddress = AudioObjectPropertyAddress(
-                mSelector: kAudioHardwarePropertyDefaultInputDevice,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
-
-            // Try to set the device (may fail due to permissions)
-            _ = AudioObjectSetPropertyData(
-                AudioObjectID(kAudioObjectSystemObject),
-                &propertyAddress,
-                0,
-                nil,
-                UInt32(MemoryLayout<CFString>.size),
-                &deviceID
-            )
+            print("🎤 Attempting to set audio device: \(selectedDevice.localizedName) (ID: \(selectedDevice.uniqueID))")
+            
+            // Convert the device's unique ID to an AudioDeviceID
+            if let audioDeviceID = getAudioDeviceID(for: selectedDevice.uniqueID) {
+                print("🎤 Found AudioDeviceID: \(audioDeviceID)")
+                
+                // Get the input node first to trigger Audio Unit creation
+                let inputNode = audioEngine.inputNode
+                
+                if let audioUnit = inputNode.audioUnit {
+                    // First, uninitialize the audio unit
+                    AudioUnitUninitialize(audioUnit)
+                    
+                    // Set the device on the audio unit
+                    var deviceID = audioDeviceID
+                    let status = AudioUnitSetProperty(
+                        audioUnit,
+                        kAudioOutputUnitProperty_CurrentDevice,
+                        kAudioUnitScope_Global,
+                        0,
+                        &deviceID,
+                        UInt32(MemoryLayout<AudioDeviceID>.size)
+                    )
+                    
+                    if status == noErr {
+                        print("🎤 Successfully set audio input device to: \(selectedDevice.localizedName)")
+                        
+                        // Reinitialize the audio unit with the new device
+                        let initStatus = AudioUnitInitialize(audioUnit)
+                        if initStatus == noErr {
+                            print("🎤 Audio unit reinitialized successfully")
+                        } else {
+                            print("❌ Failed to reinitialize audio unit. Status: \(initStatus)")
+                        }
+                    } else {
+                        print("❌ Failed to set audio input device. Status: \(status)")
+                        // Try to get a human-readable error
+                        if let error = getOSStatusError(status) {
+                            print("❌ Error: \(error)")
+                        }
+                        // Reinitialize anyway
+                        AudioUnitInitialize(audioUnit)
+                    }
+                } else {
+                    print("❌ Could not get AudioUnit from input node")
+                }
+            } else {
+                print("❌ Could not find AudioDeviceID for device: \(selectedDevice.localizedName)")
+            }
+        } else {
+            print("🎤 Using default audio input device")
         }
 
-        let audioEngine = AVAudioEngine()
         let inputNode = audioEngine.inputNode
-
+        
         // Use the input node's native format instead of creating a custom one
         let inputFormat = inputNode.outputFormat(forBus: 0)
+        print("🎤 Input format: \(inputFormat.channelCount) channels, \(inputFormat.sampleRate) Hz")
 
         // Check if format is valid
         guard inputFormat.channelCount > 0 && inputFormat.sampleRate > 0 else {
@@ -183,6 +220,89 @@ class AudioCaptureService: NSObject, ObservableObject {
         microphoneEngine?.stop()
         microphoneEngine = nil
         microphoneNode = nil
+    }
+
+    /// Get human-readable error message for OSStatus
+    private func getOSStatusError(_ status: OSStatus) -> String? {
+        switch status {
+        case kAudioUnitErr_InvalidProperty:
+            return "Invalid property"
+        case kAudioUnitErr_InvalidParameter:
+            return "Invalid parameter"
+        case kAudioUnitErr_InvalidElement:
+            return "Invalid element"
+        case kAudioUnitErr_NoConnection:
+            return "No connection"
+        case kAudioUnitErr_FailedInitialization:
+            return "Failed initialization"
+        case kAudioUnitErr_PropertyNotWritable:
+            return "Property not writable"
+        default:
+            return "Unknown error code: \(status)"
+        }
+    }
+    
+    /// Convert a device's unique ID string to an AudioDeviceID
+    private func getAudioDeviceID(for deviceUID: String) -> AudioDeviceID? {
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        
+        // Get the number of audio devices
+        var propertySize: UInt32 = 0
+        var status = AudioObjectGetPropertyDataSize(
+            AudioObjectID(kAudioObjectSystemObject),
+            &propertyAddress,
+            0,
+            nil,
+            &propertySize
+        )
+        
+        guard status == noErr else { return nil }
+        
+        // Get all device IDs
+        let deviceCount = Int(propertySize) / MemoryLayout<AudioDeviceID>.size
+        var deviceIDs = [AudioDeviceID](repeating: 0, count: deviceCount)
+        
+        status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &propertyAddress,
+            0,
+            nil,
+            &propertySize,
+            &deviceIDs
+        )
+        
+        guard status == noErr else { return nil }
+        
+        // Find the device with matching UID
+        for deviceID in deviceIDs {
+            var uidPropertyAddress = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyDeviceUID,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            
+            var uidCFString: CFString = "" as CFString
+            var uidSize = UInt32(MemoryLayout<CFString>.size)
+            
+            status = AudioObjectGetPropertyData(
+                deviceID,
+                &uidPropertyAddress,
+                0,
+                nil,
+                &uidSize,
+                &uidCFString
+            )
+            
+            if status == noErr, let uid = uidCFString as String?, uid == deviceUID {
+                return deviceID
+            }
+        }
+        
+        return nil
     }
 
 

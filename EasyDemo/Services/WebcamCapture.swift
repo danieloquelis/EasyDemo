@@ -80,7 +80,7 @@ class WebcamCapture: NSObject, ObservableObject {
     }
 
     /// Start webcam capture
-    func startCapture() async throws {
+    func startCapture(deviceId: String? = nil) async throws {
         if !hasCameraPermission {
             let granted = await requestCameraPermission()
             if !granted {
@@ -96,8 +96,7 @@ class WebcamCapture: NSObject, ObservableObject {
         session.sessionPreset = .hd1920x1080
 
         // Find camera device
-        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
-                ?? AVCaptureDevice.default(for: .video) else {
+        guard let device = selectDevice(withId: deviceId) else {
             throw WebcamError.noCameraAvailable
         }
 
@@ -188,6 +187,45 @@ class WebcamCapture: NSObject, ObservableObject {
         videoOutput = nil
         isCapturing = false
         currentFrame = nil
+    }
+
+    /// Restart capture switching to a new device (by uniqueID). If not capturing, does nothing unless permission is granted.
+    func switchToDevice(deviceId: String?) async throws {
+        let wasCapturing = isCapturing
+        stopCapture()
+        if wasCapturing {
+            try await startCapture(deviceId: deviceId)
+        }
+    }
+
+    /// List available video capture devices
+    static func availableVideoDevices() -> [AVCaptureDevice] {
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.externalUnknown, .builtInWideAngleCamera],
+            mediaType: .video,
+            position: .unspecified
+        )
+        return discovery.devices
+    }
+
+    /// Resolve an AVCaptureDevice based on uniqueID or return a reasonable default
+    private func selectDevice(withId deviceId: String?) -> AVCaptureDevice? {
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.externalUnknown, .builtInWideAngleCamera],
+            mediaType: .video,
+            position: .unspecified
+        )
+
+        if let deviceId = deviceId,
+           let specified = discovery.devices.first(where: { $0.uniqueID == deviceId }) {
+            return specified
+        }
+
+        // Prefer front wide-angle camera if available, otherwise first available video device
+        if let front = discovery.devices.first(where: { $0.position == .front }) {
+            return front
+        }
+        return discovery.devices.first
     }
 
     enum WebcamError: LocalizedError {

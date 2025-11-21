@@ -13,14 +13,16 @@ import AppKit
 /// View shown after recording is completed
 struct RecordingCompletedView: View {
     let result: RecordingResult
+    let outputDirectoryManager: OutputDirectoryManager?
     @Environment(\.dismiss) private var dismiss
     @State private var savedLocation: URL?
-    @State private var player: AVPlayer
+    @State private var player: AVPlayer?
+    @State private var isAccessingSecurityScope = false
 
-    init(result: RecordingResult) {
+    init(result: RecordingResult, outputDirectoryManager: OutputDirectoryManager? = nil) {
         self.result = result
-        // Properly initialize @State wrapped AVPlayer
-        _player = State(initialValue: AVPlayer(url: result.fileURL))
+        self.outputDirectoryManager = outputDirectoryManager
+        // Don't create player yet - we need security-scoped access first
     }
 
     var body: some View {
@@ -60,12 +62,18 @@ struct RecordingCompletedView: View {
             }
 
             // Video preview - using AppKit AVPlayerView to avoid _AVKit_SwiftUI crash
-            CustomVideoPlayer(player: player)
+            if let player = player {
+                CustomVideoPlayer(player: player)
+                    .frame(height: 400)
+                    .cornerRadius(12)
+            } else {
+                ZStack {
+                    Color.gray.opacity(0.3)
+                    ProgressView()
+                }
                 .frame(height: 400)
                 .cornerRadius(12)
-                .onAppear {
-                    player.play()
-                }
+            }
 
             // Info
             HStack(spacing: 40) {
@@ -139,8 +147,36 @@ struct RecordingCompletedView: View {
         }
         .padding(24)
         .frame(width: 700, height: 650)
+        .onAppear {
+            // Start accessing security-scoped resource BEFORE creating player
+            startAccessingFile()
+            // Now create the player with the file URL
+            player = AVPlayer(url: result.fileURL)
+            player?.play()
+        }
         .onDisappear {
-            player.pause()
+            player?.pause()
+            stopAccessingFile()
+        }
+    }
+    
+    private func startAccessingFile() {
+        // If we have an outputDirectoryManager with a custom directory, request access
+        if let manager = outputDirectoryManager, manager.customOutputDirectory != nil {
+            isAccessingSecurityScope = manager.startAccessing()
+            if isAccessingSecurityScope {
+                print("✅ Started accessing security-scoped directory for video playback")
+            } else {
+                print("⚠️ Failed to start accessing security-scoped directory")
+            }
+        }
+    }
+    
+    private func stopAccessingFile() {
+        if isAccessingSecurityScope, let manager = outputDirectoryManager {
+            manager.stopAccessing()
+            isAccessingSecurityScope = false
+            print("✅ Stopped accessing security-scoped directory")
         }
     }
 }

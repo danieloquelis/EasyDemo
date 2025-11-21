@@ -22,10 +22,10 @@ struct SetupView: View {
     @State private var showingWindowSelector = true
     @State private var expandedSection: SidebarSection? = .background
     @State private var recordingResult: RecordingResult?
-    @State private var outputDirectory: URL?
     @State private var showingFolderPicker = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @StateObject private var recordingEngine = RecordingEngine()
+    @StateObject private var outputDirectoryManager = OutputDirectoryManager()
 
     enum SidebarSection: Hashable {
         case windowSize
@@ -306,7 +306,7 @@ struct SetupView: View {
                             } label: {
                                 HStack {
                                     Image(systemName: "folder")
-                                    Text(outputDirectory?.lastPathComponent ?? "Movies/EasyDemo")
+                                    Text(outputDirectoryManager.customOutputDirectory?.lastPathComponent ?? "Temporary Folder")
                                         .lineLimit(1)
                                     Spacer()
                                     Image(systemName: "chevron.right")
@@ -366,12 +366,15 @@ struct SetupView: View {
                                     resolution: selectedResolution,
                                     frameRate: frameRate,
                                     codec: selectedCodec,
-                                    outputDirectory: outputDirectory,
+                                    outputDirectory: outputDirectoryManager.customOutputDirectory,
                                     windowScale: windowScale
                                 )
                                 Task {
                                     do {
-                                        try await recordingEngine.startRecording(configuration: config)
+                                        try await recordingEngine.startRecording(
+                                            configuration: config,
+                                            outputDirectoryManager: outputDirectoryManager
+                                        )
                                     } catch {
                                         print("Failed to start recording: \(error)")
                                     }
@@ -393,7 +396,7 @@ struct SetupView: View {
             WindowSelectorSheet(selectedWindow: $selectedWindow)
         }
         .sheet(item: $recordingResult) { result in
-            RecordingCompletedView(result: result)
+            RecordingCompletedView(result: result, outputDirectoryManager: outputDirectoryManager)
         }
         .fileImporter(
             isPresented: $showingFolderPicker,
@@ -403,7 +406,7 @@ struct SetupView: View {
             switch result {
             case .success(let urls):
                 if let url = urls.first {
-                    outputDirectory = url
+                    outputDirectoryManager.saveOutputDirectory(url)
                 }
             case .failure(let error):
                 print("Failed to select folder: \(error)")

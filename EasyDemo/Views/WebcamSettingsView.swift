@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AVFoundation
 
 /// View for configuring webcam overlay settings
 struct WebcamSettingsView: View {
@@ -13,6 +14,16 @@ struct WebcamSettingsView: View {
     @StateObject private var webcam = WebcamCapture()
     @State private var showPermissionAlert = false
     @State private var permissionError: String?
+    @State private var devices: [AVCaptureDevice] = []
+
+    private var selectedDeviceBinding: Binding<String> {
+        Binding<String>(
+            get: { configuration.selectedDeviceId ?? "" },
+            set: { newValue in
+                configuration.selectedDeviceId = newValue.isEmpty ? nil : newValue
+            }
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -23,7 +34,7 @@ struct WebcamSettingsView: View {
                     if newValue {
                         Task {
                             do {
-                                try await webcam.startCapture()
+                                try await webcam.startCapture(deviceId: configuration.selectedDeviceId)
                             } catch {
                                 await MainActor.run {
                                     configuration.isEnabled = false
@@ -49,6 +60,26 @@ struct WebcamSettingsView: View {
 
             if configuration.isEnabled {
                 Divider()
+
+                // Camera device selection
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Camera")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                    Picker("Camera", selection: selectedDeviceBinding) {
+                        Text("System Default").tag("")
+                        ForEach(devices, id: \.uniqueID) { device in
+                            Text(device.localizedName).tag(device.uniqueID)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .onChange(of: configuration.selectedDeviceId) { _, _ in
+                        Task {
+                            try? await webcam.switchToDevice(deviceId: configuration.selectedDeviceId)
+                        }
+                    }
+                }
 
                 // Shape selection
                 VStack(alignment: .leading, spacing: 8) {
@@ -93,14 +124,42 @@ struct WebcamSettingsView: View {
         }
         .onAppear {
             // Restart webcam capture if enabled when view appears
+            refreshDevices()
+            validateSelectedDevice()
             if configuration.isEnabled && !webcam.isCapturing {
                 Task {
-                    try? await webcam.startCapture()
+                    try? await webcam.startCapture(deviceId: configuration.selectedDeviceId)
                 }
             }
         }
         .onDisappear {
             webcam.stopCapture()
+        }
+        // Refresh device list on connect/disconnect
+        .onReceive(NotificationCenter.default.publisher(for: AVCaptureDevice.wasConnectedNotification)) { _ in
+            refreshDevices()
+            validateSelectedDevice()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AVCaptureDevice.wasDisconnectedNotification)) { _ in
+            refreshDevices()
+            validateSelectedDevice()
+            // If currently selected device was disconnected and webcam is on, switch to default
+            if configuration.isEnabled {
+                Task {
+                    try? await webcam.switchToDevice(deviceId: configuration.selectedDeviceId)
+                }
+            }
+        }
+    }
+
+    private func refreshDevices() {
+        devices = WebcamCapture.availableVideoDevices()
+    }
+
+    private func validateSelectedDevice() {
+        if let selectedId = configuration.selectedDeviceId,
+           !devices.contains(where: { $0.uniqueID == selectedId }) {
+            configuration.selectedDeviceId = nil
         }
     }
 }

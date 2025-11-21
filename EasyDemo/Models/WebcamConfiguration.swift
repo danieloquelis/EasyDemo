@@ -6,6 +6,8 @@ struct WebcamConfiguration: Codable {
     var shape: Shape
     var position: Position
     var size: CGFloat
+    /// Optional unique ID of the selected camera device (AVCaptureDevice.uniqueID)
+    var selectedDeviceId: String?
 
     enum Shape: String, Codable, CaseIterable, Identifiable {
         case circle = "Circle"
@@ -47,6 +49,7 @@ struct WebcamConfiguration: Codable {
         isEnabled: false,
         shape: .circle,
         position: .bottomLeft,
-        size: UIConstants.Size.webcamDefault
+        size: UIConstants.Size.webcamDefault,
+        selectedDeviceId: nil
     )
 }

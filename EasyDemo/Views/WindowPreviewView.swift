@@ -96,7 +96,7 @@ struct WindowPreviewView: View {
 
             // Start webcam if enabled
             if let config = webcamConfig, config.isEnabled {
-                try? await webcam.startCapture()
+                try? await webcam.startCapture(deviceId: config.selectedDeviceId)
             }
         }
         .onChange(of: webcamConfig?.isEnabled) { _, isEnabled in
@@ -106,8 +106,13 @@ struct WindowPreviewView: View {
             } else if isEnabled == true {
                 // Start webcam when enabled
                 Task {
-                    try? await webcam.startCapture()
+                    try? await webcam.startCapture(deviceId: webcamConfig?.selectedDeviceId)
                 }
+            }
+        }
+        .onChange(of: webcamConfig?.selectedDeviceId) { _, _ in
+            Task {
+                try? await webcam.switchToDevice(deviceId: webcamConfig?.selectedDeviceId)
             }
         }
         .onDisappear {

@@ -68,7 +68,7 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         // Start webcam if enabled
         if configuration.webcam.isEnabled {
             let webcam = WebcamCapture()
-            try await webcam.startCapture()
+            try await webcam.startCapture(deviceId: configuration.webcam.selectedDeviceId)
             self.webcamCapture = webcam
         }
 

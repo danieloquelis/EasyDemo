@@ -197,6 +197,173 @@ struct WindowPreviewView: View {
     }
 }
 
+/// Preview for display captures with background and scale
+struct DisplayPreviewView: View {
+    let display: DisplayInfo
+    let backgroundStyle: BackgroundStyle
+    let webcamConfig: WebcamConfiguration?
+    let displayScale: Double
+    @StateObject private var preview = WindowPreview()
+    @StateObject private var webcam = WebcamCapture()
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                // Background layer
+                backgroundView
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+
+                // Display preview layer
+                if let image = preview.previewImage {
+                    let imageSize = CGSize(width: image.width, height: image.height)
+                    let scaledSize = calculatePreviewSize(
+                        imageSize: imageSize,
+                        containerSize: geometry.size
+                    )
+
+                    Image(decorative: image, scale: 1.0)
+                        .resizable()
+                        .frame(width: scaledSize.width, height: scaledSize.height)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .shadow(
+                            color: .black.opacity(0.3),
+                            radius: 20,
+                            x: 0,
+                            y: 10
+                        )
+                } else {
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+
+                        Text("Capturing display preview...")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                // Webcam overlay
+                if let config = webcamConfig, config.isEnabled {
+                    if webcam.isCapturing, let webcamFrame = webcam.currentFrame {
+                        let webcamPosition = calculateWebcamPosition(
+                            config: config,
+                            viewportSize: geometry.size,
+                            webcamSize: config.size,
+                            padding: UIConstants.Padding.large
+                        )
+                        WebcamOverlayView(
+                            frame: webcamFrame,
+                            shape: config.shape,
+                            size: config.size
+                        )
+                        .position(x: webcamPosition.x, y: webcamPosition.y)
+                    } else {
+                        let webcamPosition = calculateWebcamPosition(
+                            config: config,
+                            viewportSize: geometry.size,
+                            webcamSize: config.size,
+                            padding: UIConstants.Padding.large
+                        )
+                        Circle()
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(width: config.size, height: config.size)
+                            .overlay(
+                                ProgressView()
+                                    .progressViewStyle(.circular)
+                                    .scaleEffect(0.6)
+                            )
+                            .position(x: webcamPosition.x, y: webcamPosition.y)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+        }
+        .task {
+            await preview.capturePreview(display: display)
+
+            if let config = webcamConfig, config.isEnabled {
+                try? await webcam.startCapture(deviceId: config.selectedDeviceId)
+            }
+        }
+        .onChange(of: webcamConfig?.isEnabled) { _, isEnabled in
+            if isEnabled == false {
+                webcam.stopCapture()
+            } else if isEnabled == true {
+                Task {
+                    try? await webcam.startCapture(deviceId: webcamConfig?.selectedDeviceId)
+                }
+            }
+        }
+        .onChange(of: webcamConfig?.selectedDeviceId) { _, _ in
+            Task {
+                try? await webcam.switchToDevice(deviceId: webcamConfig?.selectedDeviceId)
+            }
+        }
+        .onDisappear {
+            webcam.stopCapture()
+        }
+    }
+
+    private func calculatePreviewSize(imageSize: CGSize, containerSize: CGSize) -> CGSize {
+        let minMargin: CGFloat = 80
+        let availableWidth = containerSize.width - (minMargin * 2)
+        let availableHeight = containerSize.height - (minMargin * 2)
+
+        let widthScale = availableWidth / imageSize.width
+        let heightScale = availableHeight / imageSize.height
+        let fitScale = min(widthScale, heightScale, 1.0)
+
+        let scale = fitScale * displayScale
+        return CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+    }
+
+    private func calculateWebcamPosition(
+        config: WebcamConfiguration,
+        viewportSize: CGSize,
+        webcamSize: CGFloat,
+        padding: CGFloat
+    ) -> CGPoint {
+        let topLeftPosition = config.position.offset(
+            in: viewportSize,
+            webcamSize: webcamSize,
+            padding: padding
+        )
+        return CGPoint(
+            x: topLeftPosition.x + webcamSize / 2,
+            y: topLeftPosition.y + webcamSize / 2
+        )
+    }
+
+    @ViewBuilder
+    private var backgroundView: some View {
+        GeometryReader { geo in
+            Group {
+                switch backgroundStyle {
+                case .solidColor(let color):
+                    Rectangle()
+                        .fill(color)
+
+                case .gradient(let colors, let startPoint, let endPoint):
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: colors,
+                                startPoint: startPoint,
+                                endPoint: endPoint
+                            )
+                        )
+
+                case .image(let url):
+                    BackgroundImageView(url: url)
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
+        }
+    }
+}
+
 /// Webcam overlay view for preview
 struct WebcamOverlayView: View {
     let frame: CIImage

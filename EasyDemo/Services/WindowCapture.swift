@@ -15,13 +15,12 @@ import ScreenCaptureKit
 @MainActor
 class WindowCapture: ObservableObject {
     @Published var availableWindows: [WindowInfo] = []
+    @Published var availableDisplays: [DisplayInfo] = []
     @Published var hasScreenRecordingPermission = false
     @Published var isCheckingPermission = true
 
     init() {
-        Task {
-            await checkScreenRecordingPermission()
-        }
+        // Permission check is handled by the caller (e.g. WindowSelectionViewModel)
     }
 
     /// Check if screen recording permission is granted (preflight only, no prompt)
@@ -89,6 +88,30 @@ class WindowCapture: ObservableObject {
             self.availableWindows = windows
         } catch {
             print("Failed to enumerate windows: \(error)")
+        }
+    }
+
+    /// Enumerate all connected displays
+    func enumerateDisplays() async {
+        guard hasScreenRecordingPermission else { return }
+
+        do {
+            let content = try await SCShareableContent.current
+            var displays: [DisplayInfo] = []
+
+            for display in content.displays {
+                let info = DisplayInfo(
+                    id: display.displayID,
+                    width: display.width,
+                    height: display.height,
+                    scDisplay: display
+                )
+                displays.append(info)
+            }
+
+            self.availableDisplays = displays
+        } catch {
+            print("Failed to enumerate displays: \(error)")
         }
     }
 

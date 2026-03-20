@@ -7,28 +7,27 @@
 
 import SwiftUI
 
-/// View for selecting a window to record
+/// View for selecting a source (window or display) to record
 struct WindowSelectionView: View {
-    @Binding var selectedWindow: WindowInfo?
+    @Binding var selectedSource: CaptureSource?
     @StateObject private var viewModel = WindowSelectionViewModel()
 
     var body: some View {
         VStack(spacing: 20) {
             // Header
             VStack(spacing: 8) {
-                Text("Select Window to Record")
+                Text("Select Source to Record")
                     .font(.title)
                     .fontWeight(.bold)
 
-                Text("Choose any window on your screen to start recording")
+                Text("Choose a window or screen to start recording")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
             .padding(.top, 30)
 
-            // Loading, permission check, or window list
+            // Loading, permission check, or source list
             if viewModel.windowCapture.isCheckingPermission {
-                // Show loading state while checking permissions
                 VStack(spacing: 16) {
                     ProgressView()
                         .scaleEffect(1.5)
@@ -40,7 +39,6 @@ struct WindowSelectionView: View {
                 }
                 .padding(40)
             } else if !viewModel.windowCapture.hasScreenRecordingPermission {
-                // Show permission request UI if denied
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.shield.fill")
                         .font(.system(size: 48))
@@ -49,43 +47,61 @@ struct WindowSelectionView: View {
                     Text("Screen Recording Permission Required")
                         .font(.headline)
 
-                    Text("Please grant screen recording permission to continue")
+                    Text("Grant screen recording permission in System Settings, then switch back here")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
 
-                    Button("Grant Permission") {
+                    Button("Open System Settings") {
                         Task {
-                            await viewModel.windowCapture.requestScreenRecordingPermission()
+                            await viewModel.requestPermissionAndLoadSources()
                         }
                     }
                     .buttonStyle(.borderedProminent)
                 }
                 .padding(40)
             } else {
-                // Window list or loading
-                if viewModel.isRefreshing && viewModel.windowCapture.availableWindows.isEmpty {
-                    // Show loading state while fetching windows for the first time
+                // Capture mode picker
+                Picker("Mode", selection: $viewModel.captureMode) {
+                    ForEach(WindowSelectionViewModel.CaptureMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+
+                if viewModel.isRefreshing && viewModel.windowCapture.availableWindows.isEmpty && viewModel.windowCapture.availableDisplays.isEmpty {
                     VStack(spacing: 16) {
                         ProgressView()
                             .scaleEffect(1.5)
                             .padding()
 
-                        Text("Loading windows...")
+                        Text("Loading sources...")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }
                     .padding(40)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    // Window list
+                    // Source list
                     ScrollView {
                         LazyVStack(spacing: 12) {
-                            ForEach(viewModel.windowCapture.availableWindows) { window in
-                                WindowRowView(window: window, isSelected: selectedWindow?.id == window.id)
-                                    .onTapGesture {
-                                        selectedWindow = window
-                                    }
+                            if viewModel.captureMode == .windows {
+                                ForEach(viewModel.windowCapture.availableWindows) { window in
+                                    let source = CaptureSource.window(window)
+                                    WindowRowView(window: window, isSelected: selectedSource == source)
+                                        .onTapGesture {
+                                            selectedSource = source
+                                        }
+                                }
+                            } else {
+                                ForEach(viewModel.windowCapture.availableDisplays) { display in
+                                    let source = CaptureSource.display(display)
+                                    DisplayRowView(display: display, isSelected: selectedSource == source)
+                                        .onTapGesture {
+                                            selectedSource = source
+                                        }
+                                }
                             }
                         }
                         .padding(.horizontal)
@@ -96,10 +112,10 @@ struct WindowSelectionView: View {
                         Spacer()
                         Button {
                             Task {
-                                await viewModel.refreshWindows()
+                                await viewModel.refreshSources()
                             }
                         } label: {
-                            Label("Refresh Windows", systemImage: "arrow.clockwise")
+                            Label("Refresh", systemImage: "arrow.clockwise")
                         }
                         .disabled(viewModel.isRefreshing)
                     }
@@ -150,7 +166,7 @@ struct WindowRowView: View {
 
                 HStack(spacing: 12) {
                     Label(
-                        "\(Int(window.bounds.width)) × \(Int(window.bounds.height))",
+                        "\(Int(window.bounds.width)) x \(Int(window.bounds.height))",
                         systemImage: "arrow.up.left.and.arrow.down.right"
                     )
                     .font(.caption)
@@ -175,12 +191,68 @@ struct WindowRowView: View {
                 .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
         )
         .task {
-            // Defer thumbnail capture to avoid triggering screen access consent before recording
             thumbnail = nil
         }
     }
 }
 
+/// Row view for displaying display information
+struct DisplayRowView: View {
+    let display: DisplayInfo
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "display")
+                .font(.system(size: 24))
+                .foregroundColor(isSelected ? .white : .accentColor)
+                .frame(width: 80, height: 60)
+                .background(isSelected ? Color.accentColor : Color.accentColor.opacity(0.1))
+                .cornerRadius(8)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(display.displayName)
+                    .font(.headline)
+                    .foregroundColor(isSelected ? .white : .primary)
+                    .lineLimit(2)
+
+                HStack(spacing: 12) {
+                    Label(
+                        "\(display.width) x \(display.height)",
+                        systemImage: "arrow.up.left.and.arrow.down.right"
+                    )
+                    .font(.caption)
+
+                    if CGDisplayIsMain(display.id) != 0 {
+                        Text("Main")
+                            .font(.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(isSelected ? Color.white.opacity(0.2) : Color.accentColor.opacity(0.1))
+                            .cornerRadius(4)
+                    }
+                }
+                .foregroundColor(isSelected ? .white.opacity(0.8) : .secondary)
+            }
+
+            Spacer()
+
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title3)
+                    .foregroundColor(.white)
+            }
+        }
+        .padding()
+        .background(isSelected ? Color.accentColor : Color(.controlBackgroundColor))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+        )
+    }
+}
+
 #Preview {
-    WindowSelectionView(selectedWindow: .constant(nil))
+    WindowSelectionView(selectedSource: .constant(nil))
 }

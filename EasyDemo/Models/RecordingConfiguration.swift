@@ -3,7 +3,7 @@ import CoreGraphics
 import AVFoundation
 
 struct RecordingConfiguration {
-    let window: WindowInfo
+    let source: CaptureSource
     let background: BackgroundStyle
     let webcam: WebcamConfiguration
     let audio: AudioConfiguration
@@ -55,7 +55,7 @@ struct RecordingConfiguration {
     }
 
     static func `default`(
-        window: WindowInfo,
+        source: CaptureSource,
         background: BackgroundStyle,
         webcam: WebcamConfiguration,
         audio: AudioConfiguration = .default,
@@ -83,7 +83,7 @@ struct RecordingConfiguration {
         let outputURL = baseDirectory.appendingPathComponent(filename)
 
         return RecordingConfiguration(
-            window: window,
+            source: source,
             background: background,
             webcam: webcam,
             audio: audio,

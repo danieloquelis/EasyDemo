@@ -6,9 +6,12 @@ import Combine
 
 @MainActor
 class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
+    static let shared = RecordingEngine()
+
     @Published var isRecording = false
     @Published var recordingDuration: TimeInterval = 0
     @Published var error: Error?
+    @Published var lastRecordingResult: RecordingResult?
 
     private var stream: SCStream?
     private var assetWriter: AVAssetWriter?
@@ -46,11 +49,22 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         }
 
         let content = try await SCShareableContent.current
-        guard let scWindow = content.windows.first(where: { $0.windowID == configuration.window.id }) else {
-            throw RecordingError.windowNotFound
+        let filter: SCContentFilter
+
+        switch configuration.source {
+        case .window(let windowInfo):
+            guard let scWindow = content.windows.first(where: { $0.windowID == windowInfo.id }) else {
+                throw RecordingError.windowNotFound
+            }
+            filter = SCContentFilter(desktopIndependentWindow: scWindow)
+
+        case .display(let displayInfo):
+            guard let scDisplay = content.displays.first(where: { $0.displayID == displayInfo.id }) else {
+                throw RecordingError.displayNotFound
+            }
+            filter = SCContentFilter(display: scDisplay, excludingWindows: [])
         }
 
-        let filter = SCContentFilter(desktopIndependentWindow: scWindow)
         self.captureScaleFactor = CGFloat(filter.pointPixelScale)
 
         // Setup asset writer
@@ -87,6 +101,8 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
             let currentTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 600)
             self.recordingDuration = CMTimeGetSeconds(CMTimeSubtract(currentTime, startTime))
         }
+
+        StatusBarManager.shared.show()
     }
 
     func stopRecording() async -> RecordingResult? {
@@ -128,12 +144,14 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
 
         let fileSize = getFileSize(at: url)
 
-        return RecordingResult(
+        let result = RecordingResult(
             fileURL: url,
             duration: finalDuration,
             fileSize: fileSize,
             timestamp: Date()
         )
+        self.lastRecordingResult = result
+        return result
     }
 
     private func cleanup() {
@@ -148,6 +166,8 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         self.startTime = nil
         self.isRecording = false
         self.outputDirectoryManager = nil
+
+        StatusBarManager.shared.hide()
     }
 
     private func getFileSize(at url: URL) -> Int64 {
@@ -218,8 +238,10 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
             return resolution
         }
 
-        let windowPixelWidth = configuration.window.bounds.width * captureScaleFactor
-        let windowPixelHeight = configuration.window.bounds.height * captureScaleFactor
+        let sourceBounds = configuration.source.bounds
+
+        let windowPixelWidth = sourceBounds.width * captureScaleFactor
+        let windowPixelHeight = sourceBounds.height * captureScaleFactor
         let marginInPixels = UIConstants.Padding.minimum * 2 * captureScaleFactor
 
         return CGSize(
@@ -355,6 +377,7 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
     enum RecordingError: LocalizedError {
         case cannotAddVideoInput
         case windowNotFound
+        case displayNotFound
 
         var errorDescription: String? {
             switch self {
@@ -362,6 +385,8 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
                 return "Failed to add video input to asset writer"
             case .windowNotFound:
                 return "Selected window not found"
+            case .displayNotFound:
+                return "Selected display not found"
             }
         }
     }

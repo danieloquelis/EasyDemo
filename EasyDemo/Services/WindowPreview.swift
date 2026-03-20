@@ -88,6 +88,72 @@ class WindowPreview: NSObject, ObservableObject, SCStreamOutput {
         }
     }
 
+    /// Capture a single frame from a display for preview
+    func capturePreview(display: DisplayInfo) async {
+        guard !isCapturing else { return }
+        isCapturing = true
+
+        defer { isCapturing = false }
+
+        do {
+            let content = try await SCShareableContent.current
+
+            guard let scDisplay = content.displays.first(where: { $0.displayID == display.id }) else {
+                print("Display not found")
+                return
+            }
+
+            let filter = SCContentFilter(display: scDisplay, excludingWindows: [])
+
+            let config = SCStreamConfiguration()
+            config.width = Int(filter.contentRect.width * CGFloat(filter.pointPixelScale))
+            config.height = Int(filter.contentRect.height * CGFloat(filter.pointPixelScale))
+            config.pixelFormat = kCVPixelFormatType_32BGRA
+            config.showsCursor = false
+            config.captureResolution = .best
+            config.scalesToFit = false
+            config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
+
+            let stream = SCStream(filter: filter, configuration: config, delegate: nil)
+            self.stream = stream
+
+            try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: .main)
+
+            try await stream.startCapture()
+
+            let image = await withCheckedContinuation { continuation in
+                self.continuation = continuation
+
+                Task {
+                    try? await Task.sleep(nanoseconds: 5_000_000_000)
+                    if self.continuation != nil {
+                        self.continuation?.resume(returning: nil)
+                        self.continuation = nil
+                    }
+                }
+            }
+
+            try await stream.stopCapture()
+            self.stream = nil
+
+            if let image = image {
+                self.previewImage = image
+            }
+        } catch {
+            print("Failed to capture display preview: \(error)")
+        }
+    }
+
+    /// Capture a preview from a CaptureSource (dispatches to window or display method)
+    func capturePreview(source: CaptureSource) async {
+        switch source {
+        case .window(let windowInfo):
+            await capturePreview(window: windowInfo)
+        case .display(let displayInfo):
+            await capturePreview(display: displayInfo)
+        }
+    }
+
     // MARK: - SCStreamOutput
 
     func stream(

@@ -53,8 +53,11 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         let filter = SCContentFilter(desktopIndependentWindow: scWindow)
         self.captureScaleFactor = CGFloat(filter.pointPixelScale)
 
-        // Setup asset writer - this starts the recording session and sets self.startTime
+        // Setup asset writer
         try setupAssetWriter(configuration: configuration)
+
+        // Set startTime right before captures begin to minimize offset
+        self.startTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 600)
 
         // Start microphone/audio capture if enabled
         if configuration.audio.microphoneEnabled {
@@ -136,7 +139,7 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
     private func cleanup() {
         // Stop accessing security-scoped resource
         outputDirectoryManager?.stopAccessing()
-        
+
         self.stream = nil
         self.assetWriter = nil
         self.videoInput = nil
@@ -207,8 +210,7 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         writer.startWriting()
         // Start session at time zero - samples will have timestamps relative to this
         writer.startSession(atSourceTime: .zero)
-        // Store the actual wall clock time when we started for timestamp calculations
-        self.startTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 600)
+        // startTime is set later in startRecording(), right before captures begin
     }
 
     private func calculateOutputSize(configuration: RecordingConfiguration) -> CGSize {
@@ -311,6 +313,16 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
             return
         }
 
+        // Capture timestamp BEFORE composition to avoid drift from processing time
+        let currentTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 600)
+        let presentationTime: CMTime
+
+        if let startTime = startTime {
+            presentationTime = CMTimeSubtract(currentTime, startTime)
+        } else {
+            presentationTime = .zero
+        }
+
         let composedBuffer = videoComposer.composeFrame(
             windowBuffer: imageBuffer,
             configuration: configuration,
@@ -321,16 +333,6 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         )
 
         if let buffer = composedBuffer {
-            // Convert timestamp to be relative to recording start time
-            let currentTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 600)
-            let presentationTime: CMTime
-
-            if let startTime = startTime {
-                presentationTime = CMTimeSubtract(currentTime, startTime)
-            } else {
-                presentationTime = .zero
-            }
-
             adaptor.append(buffer, withPresentationTime: presentationTime)
             frameCount += 1
         }

@@ -27,7 +27,6 @@ class AudioCaptureService: NSObject, ObservableObject {
 
     // Timing
     private var audioStartTime: CMTime?
-    private var firstAudioSampleTime: CMTime?
 
     // MARK: - Device Management
 
@@ -91,8 +90,6 @@ class AudioCaptureService: NSObject, ObservableObject {
         } else {
             self.audioStartTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 600)
         }
-        self.firstAudioSampleTime = nil
-
         if configuration.microphoneEnabled {
             if !checkMicrophonePermission() {
                 let granted = await requestMicrophonePermission()
@@ -119,7 +116,6 @@ class AudioCaptureService: NSObject, ObservableObject {
         isCapturing = false
         microphoneCallback = nil
         audioStartTime = nil
-        firstAudioSampleTime = nil
     }
 
     // MARK: - Microphone Capture
@@ -328,16 +324,8 @@ class AudioCaptureService: NSObject, ObservableObject {
         let presentationTime: CMTime
 
         if let audioStart = audioStartTime {
-            // Calculate time since recording started
-            let elapsedTime = CMTimeSubtract(currentTime, audioStart)
-
-            // For the very first audio sample, ensure it starts at zero to match video
-            if firstAudioSampleTime == nil {
-                firstAudioSampleTime = currentTime
-                presentationTime = .zero
-            } else {
-                presentationTime = elapsedTime
-            }
+            // Calculate time since recording started (same reference as video)
+            presentationTime = CMTimeSubtract(currentTime, audioStart)
         } else {
             presentationTime = .zero
         }

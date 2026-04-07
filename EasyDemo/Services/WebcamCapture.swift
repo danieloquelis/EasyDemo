@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import AVFoundation
+@preconcurrency import AVFoundation
 import CoreImage
 import Combine
 
@@ -20,6 +20,13 @@ class WebcamCapture: NSObject, ObservableObject {
     private var captureSession: AVCaptureSession?
     private var videoOutput: AVCaptureVideoDataOutput?
     private let captureQueue = DispatchQueue(label: "com.easydemo.webcam", qos: .userInteractive)
+    private static let preferredSessionPresets: [AVCaptureSession.Preset] = [
+        .hd1920x1080,
+        .hd1280x720,
+        .high,
+        .medium,
+        .low
+    ]
 
     // Global registry to track all active webcam instances
     private static var activeInstances: [WeakRef] = []
@@ -91,96 +98,91 @@ class WebcamCapture: NSObject, ObservableObject {
 
         guard !isCapturing else { return }
 
-        // Set up capture session
         let session = AVCaptureSession()
-        session.sessionPreset = .hd1920x1080
 
-        // Find camera device
         guard let device = selectDevice(withId: deviceId) else {
             throw WebcamError.noCameraAvailable
         }
 
-        // Configure device for high quality
-        try device.lockForConfiguration()
-
-        // Set to highest quality format available
-        if let format = device.formats.first(where: { format in
-            let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-            return dimensions.width == 1920 && dimensions.height == 1080
-        }) {
-            device.activeFormat = format
-        }
-
-        // Enable smooth autofocus if available
-        if device.isFocusModeSupported(.continuousAutoFocus) {
-            device.focusMode = .continuousAutoFocus
-        }
-
-        // Enable smooth exposure if available
-        if device.isExposureModeSupported(.continuousAutoExposure) {
-            device.exposureMode = .continuousAutoExposure
-        }
-
-        // Enable auto white balance
-        if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
-            device.whiteBalanceMode = .continuousAutoWhiteBalance
-        }
-
-        device.unlockForConfiguration()
-
-        // Add input
         let input = try AVCaptureDeviceInput(device: device)
-        if session.canAddInput(input) {
-            session.addInput(input)
-        } else {
-            throw WebcamError.cannotAddInput
-        }
-
-        // Add output
         let output = AVCaptureVideoDataOutput()
         output.setSampleBufferDelegate(self, queue: captureQueue)
-
-        // Configure for high quality capture
         output.videoSettings = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-            kCVPixelBufferWidthKey as String: 1920,
-            kCVPixelBufferHeightKey as String: 1080
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
         ]
-
-        // Ensure we don't drop frames for better quality
         output.alwaysDiscardsLateVideoFrames = false
 
-        if session.canAddOutput(output) {
-            session.addOutput(output)
-
-            // Configure connection for best quality
-            if let connection = output.connection(with: .video) {
-                if connection.isVideoMirroringSupported {
-                    connection.isVideoMirrored = true  // Mirror front camera
-                }
-                if connection.isVideoOrientationSupported {
-                    connection.videoOrientation = .portrait
-                }
+        session.beginConfiguration()
+        do {
+            if session.canAddInput(input) {
+                session.addInput(input)
+            } else {
+                throw WebcamError.cannotAddInput
             }
-        } else {
-            throw WebcamError.cannotAddOutput
+
+            if let preset = preferredSessionPreset(for: session) {
+                session.sessionPreset = preset
+            }
+
+            try configureDevice(device)
+
+            if session.canAddOutput(output) {
+                session.addOutput(output)
+
+                if let connection = output.connection(with: .video) {
+                    if connection.isVideoMirroringSupported, device.position == .front {
+                        connection.isVideoMirrored = true
+                    }
+                    if #available(macOS 14.0, *) {
+                        if connection.isVideoRotationAngleSupported(0) {
+                            connection.videoRotationAngle = 0
+                        }
+                    } else if connection.isVideoOrientationSupported {
+                        connection.videoOrientation = .portrait
+                    }
+                }
+            } else {
+                throw WebcamError.cannotAddOutput
+            }
+        } catch {
+            session.commitConfiguration()
+            throw error
         }
+        session.commitConfiguration()
 
         self.captureSession = session
         self.videoOutput = output
 
-        // Start session
-        captureQueue.async {
-            session.startRunning()
+        try await startSession(session)
+        isCapturing = true
+    }
+
+    private func configureDevice(_ device: AVCaptureDevice) throws {
+        try device.lockForConfiguration()
+        defer { device.unlockForConfiguration() }
+
+        if let format = preferredFormat(for: device) {
+            device.activeFormat = format
         }
 
-        isCapturing = true
+        if device.isFocusModeSupported(.continuousAutoFocus) {
+            device.focusMode = .continuousAutoFocus
+        }
+
+        if device.isExposureModeSupported(.continuousAutoExposure) {
+            device.exposureMode = .continuousAutoExposure
+        }
+
+        if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+            device.whiteBalanceMode = .continuousAutoWhiteBalance
+        }
     }
 
     /// Stop webcam capture
     func stopCapture() {
+        let session = captureSession
         captureQueue.async {
-            self.captureSession?.stopRunning()
+            session?.stopRunning()
         }
 
         captureSession = nil
@@ -200,32 +202,96 @@ class WebcamCapture: NSObject, ObservableObject {
 
     /// List available video capture devices
     static func availableVideoDevices() -> [AVCaptureDevice] {
+        discoveredVideoDevices().sorted {
+            devicePriority(for: $0) > devicePriority(for: $1)
+        }
+    }
+
+    /// Resolve an AVCaptureDevice based on uniqueID or return a reasonable default
+    private func selectDevice(withId deviceId: String?) -> AVCaptureDevice? {
+        let devices = Self.availableVideoDevices()
+
+        if let deviceId = deviceId,
+           let specified = devices.first(where: { $0.uniqueID == deviceId }) {
+            return specified
+        }
+
+        return devices.first
+    }
+
+    private func startSession(_ session: AVCaptureSession) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            captureQueue.async {
+                session.startRunning()
+
+                if session.isRunning {
+                    continuation.resume()
+                } else {
+                    continuation.resume(throwing: WebcamError.cannotStartSession)
+                }
+            }
+        }
+    }
+
+    private func preferredFormat(for device: AVCaptureDevice) -> AVCaptureDevice.Format? {
+        let preferredDimensions = [
+            CMVideoDimensions(width: 1920, height: 1080),
+            CMVideoDimensions(width: 1280, height: 720)
+        ]
+
+        for target in preferredDimensions {
+            if let format = device.formats.first(where: { format in
+                let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                return dimensions.width == target.width && dimensions.height == target.height
+            }) {
+                return format
+            }
+        }
+
+        return device.formats.max { lhs, rhs in
+            let left = CMVideoFormatDescriptionGetDimensions(lhs.formatDescription)
+            let right = CMVideoFormatDescriptionGetDimensions(rhs.formatDescription)
+            return (left.width * left.height) < (right.width * right.height)
+        }
+    }
+
+    private func preferredSessionPreset(for session: AVCaptureSession) -> AVCaptureSession.Preset? {
+        Self.preferredSessionPresets.first { session.canSetSessionPreset($0) }
+    }
+
+    private static func discoveredVideoDevices() -> [AVCaptureDevice] {
         let discovery = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.externalUnknown, .builtInWideAngleCamera],
+            deviceTypes: supportedDeviceTypes(),
             mediaType: .video,
             position: .unspecified
         )
         return discovery.devices
     }
 
-    /// Resolve an AVCaptureDevice based on uniqueID or return a reasonable default
-    private func selectDevice(withId deviceId: String?) -> AVCaptureDevice? {
-        let discovery = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.externalUnknown, .builtInWideAngleCamera],
-            mediaType: .video,
-            position: .unspecified
-        )
+    private static func supportedDeviceTypes() -> [AVCaptureDevice.DeviceType] {
+        var deviceTypes: [AVCaptureDevice.DeviceType] = [.builtInWideAngleCamera]
 
-        if let deviceId = deviceId,
-           let specified = discovery.devices.first(where: { $0.uniqueID == deviceId }) {
-            return specified
+        if #available(macOS 14.0, *) {
+            deviceTypes.append(.continuityCamera)
+            deviceTypes.append(.external)
+        } else {
+            deviceTypes.append(.externalUnknown)
         }
 
-        // Prefer front wide-angle camera if available, otherwise first available video device
-        if let front = discovery.devices.first(where: { $0.position == .front }) {
-            return front
+        return deviceTypes
+    }
+
+    private static func devicePriority(for device: AVCaptureDevice) -> Int {
+        switch device.deviceType {
+        case .builtInWideAngleCamera:
+            return 300
+        case .continuityCamera:
+            return 200
+        case .external:
+            return 100
+        default:
+            return 0
         }
-        return discovery.devices.first
     }
 
     enum WebcamError: LocalizedError {
@@ -233,6 +299,7 @@ class WebcamCapture: NSObject, ObservableObject {
         case noCameraAvailable
         case cannotAddInput
         case cannotAddOutput
+        case cannotStartSession
 
         var errorDescription: String? {
             switch self {
@@ -244,6 +311,8 @@ class WebcamCapture: NSObject, ObservableObject {
                 return "Cannot add camera input"
             case .cannotAddOutput:
                 return "Cannot add video output"
+            case .cannotStartSession:
+                return "Camera session could not be started"
             }
         }
     }

@@ -14,6 +14,8 @@
 	<string>EasyDemo needs access to your microphone to record audio commentary with your screen recordings.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>EasyDemo needs access to your camera for webcam overlay recordings.</string>
+	<key>NSCameraUseContinuityCameraDeviceType</key>
+	<true/>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>EasyDemo needs to record your screen to capture the selected window.</string>
 </dict>

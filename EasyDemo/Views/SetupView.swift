@@ -54,7 +54,7 @@ struct SetupView: View {
                     WindowPreviewView(
                         window: window,
                         backgroundStyle: selectedBackground,
-                        webcamConfig: webcamConfig,
+                        webcamConfig: $webcamConfig,
                         windowScale: windowScale
                     )
                     .id(source.id)
@@ -64,7 +64,7 @@ struct SetupView: View {
                     DisplayPreviewView(
                         display: display,
                         backgroundStyle: selectedBackground,
-                        webcamConfig: webcamConfig,
+                        webcamConfig: $webcamConfig,
                         displayScale: windowScale
                     )
                     .id(source.id)

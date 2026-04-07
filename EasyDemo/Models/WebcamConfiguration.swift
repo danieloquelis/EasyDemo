@@ -8,6 +8,13 @@ struct WebcamConfiguration: Codable {
     var size: CGFloat
     /// Optional unique ID of the selected camera device (AVCaptureDevice.uniqueID)
     var selectedDeviceId: String?
+    /// Normalized custom top-left position within the padded recording canvas.
+    var customPosition: NormalizedPosition?
+
+    struct NormalizedPosition: Codable, Equatable {
+        var x: Double
+        var y: Double
+    }
 
     enum Shape: String, Codable, CaseIterable, Identifiable {
         case circle = "Circle"
@@ -26,7 +33,12 @@ struct WebcamConfiguration: Codable {
 
         var id: String { rawValue }
 
-        func offset(in size: CGSize, webcamSize: CGFloat, padding: CGFloat) -> CGPoint {
+        func offset(
+            in size: CGSize,
+            webcamSize: CGFloat,
+            padding: CGFloat,
+            customPosition: NormalizedPosition? = nil
+        ) -> CGPoint {
             switch self {
             case .topLeft:
                 return CGPoint(x: padding, y: padding)
@@ -40,7 +52,11 @@ struct WebcamConfiguration: Codable {
                     y: size.height - webcamSize - padding
                 )
             case .custom:
-                return .zero
+                let horizontalRange = max(size.width - webcamSize - (padding * 2), 0)
+                let verticalRange = max(size.height - webcamSize - (padding * 2), 0)
+                let x = padding + (horizontalRange * CGFloat(customPosition?.x ?? 0))
+                let y = padding + (verticalRange * CGFloat(customPosition?.y ?? 0))
+                return CGPoint(x: x, y: y)
             }
         }
     }
@@ -50,6 +66,7 @@ struct WebcamConfiguration: Codable {
         shape: .circle,
         position: .bottomLeft,
         size: UIConstants.Size.webcamDefault,
-        selectedDeviceId: nil
+        selectedDeviceId: nil,
+        customPosition: nil
     )
 }

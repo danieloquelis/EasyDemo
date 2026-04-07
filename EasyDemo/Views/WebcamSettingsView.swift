@@ -11,7 +11,6 @@ import AVFoundation
 /// View for configuring webcam overlay settings
 struct WebcamSettingsView: View {
     @Binding var configuration: WebcamConfiguration
-    @StateObject private var webcam = WebcamCapture()
     @State private var showPermissionAlert = false
     @State private var permissionError: String?
     @State private var devices: [AVCaptureDevice] = []
@@ -33,18 +32,27 @@ struct WebcamSettingsView: View {
                 .onChange(of: configuration.isEnabled) { _, newValue in
                     if newValue {
                         Task {
-                            do {
-                                try await webcam.startCapture(deviceId: configuration.selectedDeviceId)
-                            } catch {
+                            let granted = await PermissionManager.shared.requestCameraPermission()
+                            guard granted else {
                                 await MainActor.run {
                                     configuration.isEnabled = false
-                                    permissionError = error.localizedDescription
+                                    permissionError = StringConstants.Permission.cameraMessage
+                                    showPermissionAlert = true
+                                }
+                                return
+                            }
+
+                            await MainActor.run {
+                                refreshDevices()
+                                validateSelectedDevice()
+
+                                if devices.isEmpty {
+                                    configuration.isEnabled = false
+                                    permissionError = WebcamCapture.WebcamError.noCameraAvailable.localizedDescription
                                     showPermissionAlert = true
                                 }
                             }
                         }
-                    } else {
-                        webcam.stopCapture()
                     }
                 }
                 .alert("Camera Permission Required", isPresented: $showPermissionAlert) {
@@ -74,11 +82,6 @@ struct WebcamSettingsView: View {
                         }
                     }
                     .pickerStyle(.menu)
-                    .onChange(of: configuration.selectedDeviceId) { _, _ in
-                        Task {
-                            try? await webcam.switchToDevice(deviceId: configuration.selectedDeviceId)
-                        }
-                    }
                 }
 
                 // Shape selection
@@ -107,6 +110,17 @@ struct WebcamSettingsView: View {
                         }
                     }
                     .pickerStyle(.menu)
+                    .onChange(of: configuration.position) { oldValue, newValue in
+                        if newValue == .custom, configuration.customPosition == nil {
+                            configuration.customPosition = defaultCustomPosition(from: oldValue)
+                        }
+                    }
+
+                    if configuration.position == .custom {
+                        Text("Drag the webcam in the preview to place it exactly where you want.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
 
                 // Size slider
@@ -123,17 +137,8 @@ struct WebcamSettingsView: View {
             }
         }
         .onAppear {
-            // Restart webcam capture if enabled when view appears
             refreshDevices()
             validateSelectedDevice()
-            if configuration.isEnabled && !webcam.isCapturing {
-                Task {
-                    try? await webcam.startCapture(deviceId: configuration.selectedDeviceId)
-                }
-            }
-        }
-        .onDisappear {
-            webcam.stopCapture()
         }
         // Refresh device list on connect/disconnect
         .onReceive(NotificationCenter.default.publisher(for: AVCaptureDevice.wasConnectedNotification)) { _ in
@@ -143,12 +148,6 @@ struct WebcamSettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: AVCaptureDevice.wasDisconnectedNotification)) { _ in
             refreshDevices()
             validateSelectedDevice()
-            // If currently selected device was disconnected and webcam is on, switch to default
-            if configuration.isEnabled {
-                Task {
-                    try? await webcam.switchToDevice(deviceId: configuration.selectedDeviceId)
-                }
-            }
         }
     }
 
@@ -160,6 +159,21 @@ struct WebcamSettingsView: View {
         if let selectedId = configuration.selectedDeviceId,
            !devices.contains(where: { $0.uniqueID == selectedId }) {
             configuration.selectedDeviceId = nil
+        }
+    }
+
+    private func defaultCustomPosition(from previousPosition: WebcamConfiguration.Position) -> WebcamConfiguration.NormalizedPosition {
+        switch previousPosition {
+        case .topLeft:
+            return .init(x: 0, y: 0)
+        case .topRight:
+            return .init(x: 1, y: 0)
+        case .bottomLeft:
+            return .init(x: 0, y: 1)
+        case .bottomRight:
+            return .init(x: 1, y: 1)
+        case .custom:
+            return configuration.customPosition ?? .init(x: 0, y: 0)
         }
     }
 }

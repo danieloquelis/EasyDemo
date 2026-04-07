@@ -65,9 +65,16 @@ class WindowSelectionViewModel: ObservableObject {
     }
 
     func requestPermissionAndLoadSources() async {
-        // Open System Settings directly instead of triggering the system dialog,
-        // which has a "Quit & Reopen" button that doesn't work with modal sheets.
-        PermissionManager.shared.openSystemSettings(for: .screenRecording)
+        PermissionManager.shared.markScreenRecordingAttempted()
+
+        let granted = await PermissionManager.shared.requestScreenRecordingPermission()
+        windowCapture.hasScreenRecordingPermission = granted
+
+        if granted {
+            await refreshSources()
+        } else {
+            PermissionManager.shared.openSystemSettings(for: .screenRecording)
+        }
     }
 
     func selectWindow(_ window: WindowInfo) {

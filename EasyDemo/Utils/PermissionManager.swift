@@ -87,9 +87,8 @@ class PermissionManager: ObservableObject {
         hasAttemptedScreenRecordingRequest = true
     }
 
-    // Session guards to prevent repeated system prompts
+    // Guard only concurrent requests; explicit user retries should still work.
     private var isScreenRecordingRequestInFlight = false
-    private var hasRequestedScreenRecordingThisSession = false
 
     // MARK: - Check All Permissions
 
@@ -122,14 +121,13 @@ class PermissionManager: ObservableObject {
             return true
         }
 
-        // Prevent multiple prompts in one session or concurrent requests
-        if isScreenRecordingRequestInFlight || hasRequestedScreenRecordingThisSession {
+        // Prevent concurrent requests, but allow explicit retries in the same app session.
+        if isScreenRecordingRequestInFlight {
             await checkScreenRecordingPermission()
             return screenRecordingStatus.isGranted
         }
 
         isScreenRecordingRequestInFlight = true
-        hasRequestedScreenRecordingThisSession = true
 
         // Trigger the native system dialog
         let _ = CGRequestScreenCaptureAccess()

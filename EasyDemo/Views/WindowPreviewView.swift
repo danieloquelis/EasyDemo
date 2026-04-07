@@ -11,10 +11,12 @@ import SwiftUI
 struct WindowPreviewView: View {
     let window: WindowInfo
     let backgroundStyle: BackgroundStyle
-    let webcamConfig: WebcamConfiguration?
+    @Binding var webcamConfig: WebcamConfiguration
     let windowScale: Double  // 0.2 to 1.0 (20% to 100%)
     @StateObject private var preview = WindowPreview()
     @StateObject private var webcam = WebcamCapture()
+    @StateObject private var recordingEngine = RecordingEngine.shared
+    @State private var customDragStartTopLeft: CGPoint?
 
     var body: some View {
         GeometryReader { geometry in
@@ -52,40 +54,8 @@ struct WindowPreviewView: View {
                 }
 
                 // Webcam overlay - positioned absolutely relative to entire viewport (like recording engine)
-                if let config = webcamConfig, config.isEnabled {
-                    if webcam.isCapturing, let webcamFrame = webcam.currentFrame {
-                        let webcamPosition = calculateWebcamPositionAbsolute(
-                            config: config,
-                            viewportSize: geometry.size,
-                            webcamSize: config.size,
-                            padding: UIConstants.Padding.large
-                        )
-
-                        WebcamOverlayView(
-                            frame: webcamFrame,
-                            shape: config.shape,
-                            size: config.size
-                        )
-                        .position(x: webcamPosition.x, y: webcamPosition.y)
-                    } else {
-                        // Show placeholder when webcam is enabled but not yet capturing
-                        let webcamPosition = calculateWebcamPositionAbsolute(
-                            config: config,
-                            viewportSize: geometry.size,
-                            webcamSize: config.size,
-                            padding: UIConstants.Padding.large
-                        )
-
-                        Circle()
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(width: config.size, height: config.size)
-                            .overlay(
-                                ProgressView()
-                                    .progressViewStyle(.circular)
-                                    .scaleEffect(0.6)
-                            )
-                            .position(x: webcamPosition.x, y: webcamPosition.y)
-                    }
+                if webcamConfig.isEnabled {
+                    webcamOverlay(in: geometry.size)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -93,30 +63,104 @@ struct WindowPreviewView: View {
         }
         .task {
             await preview.capturePreview(window: window)
-
-            // Start webcam if enabled
-            if let config = webcamConfig, config.isEnabled {
-                try? await webcam.startCapture(deviceId: config.selectedDeviceId)
-            }
+            await syncWebcamCapture()
         }
-        .onChange(of: webcamConfig?.isEnabled) { _, isEnabled in
-            // Stop webcam when disabled
+        .onChange(of: webcamConfig.isEnabled) { _, isEnabled in
             if isEnabled == false {
                 webcam.stopCapture()
             } else if isEnabled == true {
                 // Start webcam when enabled
                 Task {
-                    try? await webcam.startCapture(deviceId: webcamConfig?.selectedDeviceId)
+                    await syncWebcamCapture()
                 }
             }
         }
-        .onChange(of: webcamConfig?.selectedDeviceId) { _, _ in
+        .onChange(of: webcamConfig.selectedDeviceId) { _, _ in
             Task {
-                try? await webcam.switchToDevice(deviceId: webcamConfig?.selectedDeviceId)
+                await syncWebcamCapture(forceRestart: true)
+            }
+        }
+        .onChange(of: recordingEngine.isRecording) { _, isRecording in
+            if isRecording {
+                webcam.stopCapture()
+            } else {
+                Task {
+                    await syncWebcamCapture()
+                }
             }
         }
         .onDisappear {
             webcam.stopCapture()
+        }
+    }
+
+    private func syncWebcamCapture(forceRestart: Bool = false) async {
+        guard !recordingEngine.isRecording, webcamConfig.isEnabled else {
+            webcam.stopCapture()
+            return
+        }
+
+        do {
+            if forceRestart && webcam.isCapturing {
+                try await webcam.switchToDevice(deviceId: webcamConfig.selectedDeviceId)
+            } else {
+                try await webcam.startCapture(deviceId: webcamConfig.selectedDeviceId)
+            }
+        } catch {
+            webcam.stopCapture()
+            print("Failed to start webcam preview: \(error.localizedDescription)")
+        }
+    }
+
+    @ViewBuilder
+    private func webcamOverlay(in viewportSize: CGSize) -> some View {
+        let webcamPosition = calculateWebcamPositionAbsolute(
+            viewportSize: viewportSize,
+            webcamSize: webcamConfig.size,
+            padding: UIConstants.Padding.large
+        )
+
+        if webcam.isCapturing, let webcamFrame = webcam.currentFrame {
+            let overlay = WebcamOverlayView(
+                frame: webcamFrame,
+                shape: webcamConfig.shape,
+                size: webcamConfig.size
+            )
+            .position(x: webcamPosition.x, y: webcamPosition.y)
+
+            if webcamConfig.position == .custom {
+                overlay.gesture(
+                    customDragGesture(
+                        viewportSize: viewportSize,
+                        webcamSize: webcamConfig.size,
+                        padding: UIConstants.Padding.large
+                    )
+                )
+            } else {
+                overlay
+            }
+        } else {
+            let placeholder = Circle()
+                .fill(Color.gray.opacity(0.3))
+                .frame(width: webcamConfig.size, height: webcamConfig.size)
+                .overlay(
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .scaleEffect(0.6)
+                )
+                .position(x: webcamPosition.x, y: webcamPosition.y)
+
+            if webcamConfig.position == .custom {
+                placeholder.gesture(
+                    customDragGesture(
+                        viewportSize: viewportSize,
+                        webcamSize: webcamConfig.size,
+                        padding: UIConstants.Padding.large
+                    )
+                )
+            } else {
+                placeholder
+            }
         }
     }
 
@@ -148,24 +192,49 @@ struct WindowPreviewView: View {
     /// Returns center position for use with .position() modifier
     /// Positions relative to the entire viewport (matching RecordingEngine behavior)
     private func calculateWebcamPositionAbsolute(
-        config: WebcamConfiguration,
         viewportSize: CGSize,
         webcamSize: CGFloat,
         padding: CGFloat
     ) -> CGPoint {
-        // Use the same offset calculation as WebcamConfiguration.Position.offset
-        // This gives us the top-left corner position
-        let topLeftPosition = config.position.offset(
-            in: viewportSize,
+        webcamCenterPosition(
+            config: webcamConfig,
+            viewportSize: viewportSize,
             webcamSize: webcamSize,
             padding: padding
         )
+    }
 
-        // Convert from top-left to center position (for .position() modifier)
-        return CGPoint(
-            x: topLeftPosition.x + webcamSize / 2,
-            y: topLeftPosition.y + webcamSize / 2
-        )
+    private func customDragGesture(
+        viewportSize: CGSize,
+        webcamSize: CGFloat,
+        padding: CGFloat
+    ) -> some Gesture {
+        DragGesture()
+            .onChanged { value in
+                let dragStart = customDragStartTopLeft ?? webcamTopLeftPosition(
+                    config: webcamConfig,
+                    viewportSize: viewportSize,
+                    webcamSize: webcamSize,
+                    padding: padding
+                )
+                if customDragStartTopLeft == nil {
+                    customDragStartTopLeft = dragStart
+                }
+
+                let candidate = CGPoint(
+                    x: dragStart.x + value.translation.width,
+                    y: dragStart.y + value.translation.height
+                )
+                webcamConfig.customPosition = normalizedWebcamPosition(
+                    from: candidate,
+                    viewportSize: viewportSize,
+                    webcamSize: webcamSize,
+                    padding: padding
+                )
+            }
+            .onEnded { _ in
+                customDragStartTopLeft = nil
+            }
     }
 
     @ViewBuilder
@@ -201,10 +270,12 @@ struct WindowPreviewView: View {
 struct DisplayPreviewView: View {
     let display: DisplayInfo
     let backgroundStyle: BackgroundStyle
-    let webcamConfig: WebcamConfiguration?
+    @Binding var webcamConfig: WebcamConfiguration
     let displayScale: Double
     @StateObject private var preview = WindowPreview()
     @StateObject private var webcam = WebcamCapture()
+    @StateObject private var recordingEngine = RecordingEngine.shared
+    @State private var customDragStartTopLeft: CGPoint?
 
     var body: some View {
         GeometryReader { geometry in
@@ -243,37 +314,8 @@ struct DisplayPreviewView: View {
                 }
 
                 // Webcam overlay
-                if let config = webcamConfig, config.isEnabled {
-                    if webcam.isCapturing, let webcamFrame = webcam.currentFrame {
-                        let webcamPosition = calculateWebcamPosition(
-                            config: config,
-                            viewportSize: geometry.size,
-                            webcamSize: config.size,
-                            padding: UIConstants.Padding.large
-                        )
-                        WebcamOverlayView(
-                            frame: webcamFrame,
-                            shape: config.shape,
-                            size: config.size
-                        )
-                        .position(x: webcamPosition.x, y: webcamPosition.y)
-                    } else {
-                        let webcamPosition = calculateWebcamPosition(
-                            config: config,
-                            viewportSize: geometry.size,
-                            webcamSize: config.size,
-                            padding: UIConstants.Padding.large
-                        )
-                        Circle()
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(width: config.size, height: config.size)
-                            .overlay(
-                                ProgressView()
-                                    .progressViewStyle(.circular)
-                                    .scaleEffect(0.6)
-                            )
-                            .position(x: webcamPosition.x, y: webcamPosition.y)
-                    }
+                if webcamConfig.isEnabled {
+                    webcamOverlay(in: geometry.size)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -281,27 +323,103 @@ struct DisplayPreviewView: View {
         }
         .task {
             await preview.capturePreview(display: display)
-
-            if let config = webcamConfig, config.isEnabled {
-                try? await webcam.startCapture(deviceId: config.selectedDeviceId)
-            }
+            await syncWebcamCapture()
         }
-        .onChange(of: webcamConfig?.isEnabled) { _, isEnabled in
+        .onChange(of: webcamConfig.isEnabled) { _, isEnabled in
             if isEnabled == false {
                 webcam.stopCapture()
             } else if isEnabled == true {
                 Task {
-                    try? await webcam.startCapture(deviceId: webcamConfig?.selectedDeviceId)
+                    await syncWebcamCapture()
                 }
             }
         }
-        .onChange(of: webcamConfig?.selectedDeviceId) { _, _ in
+        .onChange(of: webcamConfig.selectedDeviceId) { _, _ in
             Task {
-                try? await webcam.switchToDevice(deviceId: webcamConfig?.selectedDeviceId)
+                await syncWebcamCapture(forceRestart: true)
+            }
+        }
+        .onChange(of: recordingEngine.isRecording) { _, isRecording in
+            if isRecording {
+                webcam.stopCapture()
+            } else {
+                Task {
+                    await syncWebcamCapture()
+                }
             }
         }
         .onDisappear {
             webcam.stopCapture()
+        }
+    }
+
+    private func syncWebcamCapture(forceRestart: Bool = false) async {
+        guard !recordingEngine.isRecording, webcamConfig.isEnabled else {
+            webcam.stopCapture()
+            return
+        }
+
+        do {
+            if forceRestart && webcam.isCapturing {
+                try await webcam.switchToDevice(deviceId: webcamConfig.selectedDeviceId)
+            } else {
+                try await webcam.startCapture(deviceId: webcamConfig.selectedDeviceId)
+            }
+        } catch {
+            webcam.stopCapture()
+            print("Failed to start webcam preview: \(error.localizedDescription)")
+        }
+    }
+
+    @ViewBuilder
+    private func webcamOverlay(in viewportSize: CGSize) -> some View {
+        let webcamPosition = calculateWebcamPosition(
+            viewportSize: viewportSize,
+            webcamSize: webcamConfig.size,
+            padding: UIConstants.Padding.large
+        )
+
+        if webcam.isCapturing, let webcamFrame = webcam.currentFrame {
+            let overlay = WebcamOverlayView(
+                frame: webcamFrame,
+                shape: webcamConfig.shape,
+                size: webcamConfig.size
+            )
+            .position(x: webcamPosition.x, y: webcamPosition.y)
+
+            if webcamConfig.position == .custom {
+                overlay.gesture(
+                    customDragGesture(
+                        viewportSize: viewportSize,
+                        webcamSize: webcamConfig.size,
+                        padding: UIConstants.Padding.large
+                    )
+                )
+            } else {
+                overlay
+            }
+        } else {
+            let placeholder = Circle()
+                .fill(Color.gray.opacity(0.3))
+                .frame(width: webcamConfig.size, height: webcamConfig.size)
+                .overlay(
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .scaleEffect(0.6)
+                )
+                .position(x: webcamPosition.x, y: webcamPosition.y)
+
+            if webcamConfig.position == .custom {
+                placeholder.gesture(
+                    customDragGesture(
+                        viewportSize: viewportSize,
+                        webcamSize: webcamConfig.size,
+                        padding: UIConstants.Padding.large
+                    )
+                )
+            } else {
+                placeholder
+            }
         }
     }
 
@@ -319,20 +437,49 @@ struct DisplayPreviewView: View {
     }
 
     private func calculateWebcamPosition(
-        config: WebcamConfiguration,
         viewportSize: CGSize,
         webcamSize: CGFloat,
         padding: CGFloat
     ) -> CGPoint {
-        let topLeftPosition = config.position.offset(
-            in: viewportSize,
+        webcamCenterPosition(
+            config: webcamConfig,
+            viewportSize: viewportSize,
             webcamSize: webcamSize,
             padding: padding
         )
-        return CGPoint(
-            x: topLeftPosition.x + webcamSize / 2,
-            y: topLeftPosition.y + webcamSize / 2
-        )
+    }
+
+    private func customDragGesture(
+        viewportSize: CGSize,
+        webcamSize: CGFloat,
+        padding: CGFloat
+    ) -> some Gesture {
+        DragGesture()
+            .onChanged { value in
+                let dragStart = customDragStartTopLeft ?? webcamTopLeftPosition(
+                    config: webcamConfig,
+                    viewportSize: viewportSize,
+                    webcamSize: webcamSize,
+                    padding: padding
+                )
+                if customDragStartTopLeft == nil {
+                    customDragStartTopLeft = dragStart
+                }
+
+                let candidate = CGPoint(
+                    x: dragStart.x + value.translation.width,
+                    y: dragStart.y + value.translation.height
+                )
+                webcamConfig.customPosition = normalizedWebcamPosition(
+                    from: candidate,
+                    viewportSize: viewportSize,
+                    webcamSize: webcamSize,
+                    padding: padding
+                )
+            }
+            .onEnded { _ in
+                customDragStartTopLeft = nil
+            }
     }
 
     @ViewBuilder
@@ -407,6 +554,62 @@ struct WebcamOverlayView: View {
     }
 }
 
+private func webcamTopLeftPosition(
+    config: WebcamConfiguration,
+    viewportSize: CGSize,
+    webcamSize: CGFloat,
+    padding: CGFloat
+) -> CGPoint {
+    config.position.offset(
+        in: viewportSize,
+        webcamSize: webcamSize,
+        padding: padding,
+        customPosition: config.customPosition
+    )
+}
+
+private func webcamCenterPosition(
+    config: WebcamConfiguration,
+    viewportSize: CGSize,
+    webcamSize: CGFloat,
+    padding: CGFloat
+) -> CGPoint {
+    let topLeft = webcamTopLeftPosition(
+        config: config,
+        viewportSize: viewportSize,
+        webcamSize: webcamSize,
+        padding: padding
+    )
+
+    return CGPoint(
+        x: topLeft.x + webcamSize / 2,
+        y: topLeft.y + webcamSize / 2
+    )
+}
+
+private func normalizedWebcamPosition(
+    from topLeft: CGPoint,
+    viewportSize: CGSize,
+    webcamSize: CGFloat,
+    padding: CGFloat
+) -> WebcamConfiguration.NormalizedPosition {
+    let minX = padding
+    let minY = padding
+    let maxX = max(viewportSize.width - webcamSize - padding, minX)
+    let maxY = max(viewportSize.height - webcamSize - padding, minY)
+
+    let clampedX = min(max(topLeft.x, minX), maxX)
+    let clampedY = min(max(topLeft.y, minY), maxY)
+
+    let horizontalRange = max(maxX - minX, 0)
+    let verticalRange = max(maxY - minY, 0)
+
+    let normalizedX = horizontalRange > 0 ? (clampedX - minX) / horizontalRange : 0
+    let normalizedY = verticalRange > 0 ? (clampedY - minY) / verticalRange : 0
+
+    return .init(x: normalizedX, y: normalizedY)
+}
+
 #Preview {
     WindowPreviewView(
         window: WindowInfo(
@@ -419,7 +622,7 @@ struct WebcamOverlayView: View {
             scWindow: nil
         ),
         backgroundStyle: .solidColor(.black),
-        webcamConfig: nil,
+        webcamConfig: .constant(.default),
         windowScale: 1.0
     )
 }

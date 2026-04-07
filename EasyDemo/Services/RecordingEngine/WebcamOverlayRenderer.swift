@@ -25,7 +25,8 @@ final class WebcamOverlayRenderer {
         let position = configuration.position.offset(
             in: canvasSize,
             webcamSize: size,
-            padding: padding
+            padding: padding,
+            customPosition: configuration.customPosition
         )
 
         let flippedY = canvasSize.height - position.y - size

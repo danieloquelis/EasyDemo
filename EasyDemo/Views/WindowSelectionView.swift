@@ -47,12 +47,12 @@ struct WindowSelectionView: View {
                     Text("Screen Recording Permission Required")
                         .font(.headline)
 
-                    Text("Grant screen recording permission in System Settings, then switch back here")
+                    Text("Grant screen recording permission in System Settings. On macOS, you may need to quit and reopen EasyDemo before sources appear.")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
 
-                    Button("Open System Settings") {
+                    Button("Grant Permission") {
                         Task {
                             await viewModel.requestPermissionAndLoadSources()
                         }
